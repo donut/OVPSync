@@ -33,3 +33,17 @@ setup.log
 
 
 # End of https://www.gitignore.io/api/ocaml,visualstudiocode
+
+
+# atdgen generated files
+*_j.ml
+*_j.mli
+*_t.ml
+*_t.mli
+
+# merlin generated files
+.merlin
+
+# Config
+config.json
+!config.example.json
