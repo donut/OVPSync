@@ -1,0 +1,50 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "atdgen",
+      "type": "shell",
+      "command": "find . -iname '*.atd' -exec atdgen -t '{}' \\; -exec atdgen -j '{}' \\;",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "jbuilder build bin/main.exe",
+      "dependsOn": [
+        "atdgen"
+      ],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$ocamlc"
+      ]
+    },
+    {
+      "label": "run",
+      "type": "process",
+      "command": "_build/default/bin/main.exe",
+      "dependsOn": [
+        "build"
+      ],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
