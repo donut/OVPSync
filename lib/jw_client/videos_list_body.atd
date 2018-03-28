@@ -1,0 +1,21 @@
+
+type video <ocaml from="Video" t="t"> = abstract
+
+type status =
+  [ Ok <json name="ok">
+  | Error <json name="error"> ]
+
+type rate_limit = {
+  reset: int;
+  limit: int;
+  remaining: int;
+}
+
+type t = {
+  status: status;
+  videos: video list;
+  rate_limit: rate_limit;
+  limit: int;
+  offset: int;
+  total: int;
+}

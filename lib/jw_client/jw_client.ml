@@ -13,10 +13,10 @@ let gen_required_params key =
   let timestamp = Unix.time () |> int_of_float |> string_of_int in
   let nonce = Random.int @@ BatInt.pow 10 8 |> sprintf "%08d" in
 
-  [ ("api_format", ["json"]);
-    ("api_key", [key]);
-    ("api_timestamp", [timestamp]);
-    ("api_nonce", [nonce]) ]
+  [ "api_format", ["json"];
+    "api_key", [key];
+    "api_timestamp", [timestamp];
+    "api_nonce", [nonce] ]
 
 
 let merge_params la lb = 
@@ -40,7 +40,8 @@ let call ~key ~secret path ?(params=None) () =
   let params' = merge_params
     (gen_required_params key)
     (BatOption.default [] params) in
-  let signed = sign_query secret params' in
+  let params'' = ("result_limit", ["1"]) :: params' in
+  let signed = sign_query secret params'' in
   let query = Uri.encoded_of_query signed in
   let uri = [ platform_prefix_url; path; "?"; query; ] |> String.concat ""
             |> Uri.of_string in
@@ -51,5 +52,7 @@ let call ~key ~secret path ?(params=None) () =
   printf "Headers: %s\n" (resp |> C.Response.headers |> C.Header.to_string);
   body |> Clwt.Body.to_string >|= fun body -> 
   printf "Body of length: %d\n" (String.length body);
-  print_endline ("Received body\n" ^ body);
+  print_endline ("#### Body ####\n\n" ^ body ^ "\n\n#### END ####\n");
+  let lst = Videos_list_body_j.t_of_string body in
+  print_endline ("Videos: " ^ (lst.videos |> List.length |> string_of_int));
   ()

@@ -8,7 +8,8 @@ let main () =
   Printf.printf "JW API key: %s" @@ Conf.JW_source.key conf;
 
   Jw_client.call
-    ~key:(Conf.JW_source.key conf) ~secret:(Conf.JW_source.secret conf)
+    ~key:(Conf.JW_source.key conf)
+    ~secret:(Conf.JW_source.secret conf)
     "/videos/list" 
     ()
 

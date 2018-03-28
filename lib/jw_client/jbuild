@@ -2,4 +2,4 @@
 
 (library
   ((name jw_client)
-   (libraries (batteries cohttp.lwt lwt sha))))
+   (libraries (atdgen batteries cohttp.lwt lwt sha))))
