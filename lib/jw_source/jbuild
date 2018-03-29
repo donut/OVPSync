@@ -1,0 +1,6 @@
+(jbuild_version 1)
+
+(library
+  ((name jw_source)
+   (libraries (jw_client
+               batteries lwt))))
