@@ -1,5 +1,6 @@
 
 open Lwt.Infix
+open Printf
 module Conf = Lib.Conf
 
 let main () =
@@ -7,12 +8,17 @@ let main () =
   print_endline "Good morning, Starshine. The Earth says, \"Hello!\"";
   Printf.printf "JW API key: %s" @@ Conf.JW_source.key conf;
 
-  Jw_client.call
+  let stream = Jw_client.get_videos_list_stream
     ~key:(Conf.JW_source.key conf)
     ~secret:(Conf.JW_source.secret conf)
-    "/videos/list" 
-    ()
-
+    ~params:["result_limit", ["3"]]
+    () in
+  
+  stream |> Lwt_stream.iter_s (fun ((offset, video) : int * Jw_client.video) ->
+    printf "%d: %s" offset video.title;
+    print_newline ();
+    Lwt.return ()
+  )
 
 let () = 
   Random.self_init ();

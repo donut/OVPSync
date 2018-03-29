@@ -6,6 +6,9 @@ module C = Cohttp
 module Clwt = Cohttp_lwt
 module Clu = Cohttp_lwt_unix
 
+type videos_list_body = Videos_list_body_t.t
+type video = Video_t.t
+
 let platform_prefix_url = "https://api.jwplatform.com/v1"
 
 
@@ -36,23 +39,48 @@ let sign_query secret params =
   ("api_signature", [signature]) :: params
 
 
-let call ~key ~secret path ?(params=None) () =
-  let params' = merge_params
-    (gen_required_params key)
-    (BatOption.default [] params) in
-  let params'' = ("result_limit", ["1"]) :: params' in
-  let signed = sign_query secret params'' in
+let call ~key ~secret path ?(params=[]) () =
+  let params' = merge_params (gen_required_params key) params in
+  let signed = sign_query secret params' in
   let query = Uri.encoded_of_query signed in
   let uri = [ platform_prefix_url; path; "?"; query; ] |> String.concat ""
             |> Uri.of_string in
 
   Clu.Client.get uri >>= fun (resp, body) ->
+
   let code = resp |> C.Response.status |> C.Code.code_of_status in
   printf "Response code: %d\n" code;
   printf "Headers: %s\n" (resp |> C.Response.headers |> C.Header.to_string);
-  body |> Clwt.Body.to_string >|= fun body -> 
-  printf "Body of length: %d\n" (String.length body);
-  print_endline ("#### Body ####\n\n" ^ body ^ "\n\n#### END ####\n");
-  let lst = Videos_list_body_j.t_of_string body in
-  print_endline ("Videos: " ^ (lst.videos |> List.length |> string_of_int));
-  ()
+
+  Lwt.return (resp, body)
+
+
+let get_videos_list ~key ~secret ?params () =
+  call ~key ~secret "/videos/list" ?params () >>= fun (_resp, body) ->
+  Clwt.Body.to_string body >>= fun body ->
+  Videos_list_body_j.t_of_string body |> Lwt.return
+
+
+let get_videos_list_stream ~key ~secret ?(params=[]) ?(offset=0) () =
+  let offset = ref offset in
+  let videos = ref [] in
+
+  Lwt_stream.from (fun () -> 
+    (match !videos with 
+      | [] -> 
+        let params' = merge_params
+          params
+          ["result_offset", [!offset |> string_of_int]] in
+        get_videos_list ~key ~secret ~params:params' () >>= fun body ->
+        offset := body.offset;
+        Lwt.return body.videos
+
+      | l -> Lwt.return l
+
+    ) >>= function
+    | [] -> Lwt.return None
+    | h :: tl ->
+      videos := tl;
+      offset := !offset + 1;
+      Lwt.return @@ Some (!offset, h)
+  )
