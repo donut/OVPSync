@@ -2,5 +2,5 @@
 
 (library
   ((name jw_source)
-   (libraries (jw_client
+   (libraries (jw_client sync
                batteries lwt))))
