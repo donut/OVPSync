@@ -62,6 +62,9 @@ setup.log
 # End of https://www.gitignore.io/api/ocaml,macos,visualstudiocode
 
 
+# Misc.
+/work
+
 # atdgen generated files
 *_j.ml
 *_j.mli
