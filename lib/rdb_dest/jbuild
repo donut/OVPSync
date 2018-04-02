@@ -1,0 +1,5 @@
+(jbuild_version 1)
+
+(library
+  ((name rdb_dest)
+   (libraries (batteries caqti caqti-dynload caqti-lwt lwt uri))))
