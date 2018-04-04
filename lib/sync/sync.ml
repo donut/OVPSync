@@ -2,8 +2,16 @@
 open Lwt.Infix
 
 
-module type Source = sig
+module type Variable_store = sig
+  val set : string -> string -> unit Lwt.t
+  val get : string -> ?default:string -> unit -> string Lwt.t
+  val get_opt : string -> string option Lwt.t
+  val get_like : string -> (string * string) list Lwt.t
+  val delete : string -> unit Lwt.t
+end
 
+
+module type Source = sig
   type t
   type offset
 

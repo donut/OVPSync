@@ -44,15 +44,45 @@ let main () =
   Caqti_lwt.or_fail >>= fun dbc ->
   let module DB = (val dbc : Caqti_lwt.CONNECTION) in
   print_endline "Connected?";
-  let get = Caqti_request.find
-    Caqti_type.unit Caqti_type.(tup4 int string string string)
-    "SELECT * FROM setting" in
-  DB.find get () >>= (function
-    | Ok (id, ns, name, value) ->
-      Lwt_io.printl (ns ^ "." ^ name ^ ": " ^ value)
-    | Error err -> 
-      Lwt_io.printl (Caqti_error.show err)
-  ) >>= fun () ->
+
+  let module Var_store = Variable_store.Make(DB)(struct
+    let namespace = "t"
+  end) in
+
+  Var_store.set "dingo" "bingo" >>= fun () ->
+  Var_store.set "goomba" "koopa" >>= fun () ->
+  Var_store.set "video-1234" "boop" >>= fun () ->
+  Var_store.set "video-4321" "poob" >>= fun () ->
+  Var_store.set "video-3421" "obpo" >>= fun () ->
+
+  Var_store.get "dingo" () >>= fun v ->
+  Lwt_io.printl ("got dingo: " ^ v) >>= fun () ->
+
+  Var_store.set "dingo" "rango" >>= fun () ->
+
+  Var_store.get "dingo" () >>= fun v ->
+  Lwt_io.printl ("got dingo: " ^ v) >>= fun () ->
+
+  Var_store.get "jango" ~default:"fett" () >>= fun v ->
+  Lwt_io.printl ("got jango: " ^ v) >>= fun () ->
+
+  Var_store.get_opt "goomba" >>= begin function 
+    | Some v -> Lwt_io.printl ("got goomba: " ^ v)
+    | None -> Lwt_io.printl "didn't get goomba :"
+  end >>= fun () ->
+
+  Var_store.get_like "video-%" >>= fun vars ->
+  print_endline "Found vars:";
+  vars |> List.iter (fun (k, v) -> print_endline (k ^ ": " ^ v));
+
+  (* ["dingo"; "goomba"; "video-1234"; "video-4321"; "video-3421"]
+  |> List.map (fun k -> Var_store.delete k)
+  |> Lwt.join
+  >>= fun () -> *)
+
+  Var_store.get "dingoz" () >>= fun v ->
+  Lwt_io.printl ("This should not exist: " ^ v) >>= fun () ->
+
   Lwt_io.printl "test" >>=
   Synker.sync
 

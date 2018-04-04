@@ -1,0 +1,5 @@
+(jbuild_version 1)
+
+(library
+  ((name variable_store)
+   (libraries (batteries caqti caqti-dynload caqti-lwt lwt))))
