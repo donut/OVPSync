@@ -42,13 +42,16 @@ struct
           Lwt.return body.videos
 
         | l -> Lwt.return l
-
-      ) >>= function
+      )
+      >>= function
       | [] -> Lwt.return None
       | h :: tl ->
         videos := tl;
         offset := !offset + 1;
         Lwt.return @@ Some (!offset, h)
     )
+
+
+  let cleanup t = Lwt.return ()
 
 end
