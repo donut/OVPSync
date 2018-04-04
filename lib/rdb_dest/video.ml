@@ -20,6 +20,7 @@ type t = {
   expires: int option;
 
   file_uri: Uri.t;
+  filename: string;
   md5: string;
   width: int;
   height: int;
