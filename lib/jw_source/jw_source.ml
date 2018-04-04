@@ -19,6 +19,15 @@ struct
   let string_of_offset = string_of_int
 
   let make_stream ?(offset=0) () =
+    (* 1: Check if video is published and has passthrough *)
+    (* 2: If not, add to runtime and permanent list for revisiting and clean up
+          later and make API calls to publish and/or add passthrough. *)
+    (* 3: Loop through current set all have been passed on to dest. *)
+    (* 4: Clean up those confirmed synced to destination, via 
+          [cleanup t -> unit Lwt.t] *)
+    (* 6: At the end of each set, check permanent list to clean up any times
+          not in current list. *)
+    (* 7: Move to next set. *)
     let offset = ref offset in
     let videos = ref [] in
 
