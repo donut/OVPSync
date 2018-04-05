@@ -39,13 +39,13 @@ end)
 let main () =
   Lwt_io.printl "Good morning, Starshine. The Earth says, \"Hello!\""
   >>= fun () ->
-  let db_uri = "mariadb://ovp_sync:abc123@localhost/ovp_sync" in
-  Rdb_dest.Client.connect (Uri.of_string db_uri) >>=
-  Caqti_lwt.or_fail >>= fun dbc ->
-  let module DB = (val dbc : Caqti_lwt.CONNECTION) in
+  let db_uri = Uri.of_string "mariadb://ovp_sync:abc123@localhost/ovp_sync" in
+  Lwt.return @@ Caqti_lwt.connect_pool db_uri >>=
+  Caqti_lwt.or_fail >>= fun pool ->
   print_endline "Connected?";
 
-  let module Var_store = Variable_store.Make(DB)(struct
+  let module Var_store = Variable_store.Make(struct
+    let db_pool = pool
     let namespace = "t"
   end) in
 
@@ -75,13 +75,19 @@ let main () =
   print_endline "Found vars:";
   vars |> List.iter (fun (k, v) -> print_endline (k ^ ": " ^ v));
 
-  (* ["dingo"; "goomba"; "video-1234"; "video-4321"; "video-3421"]
+  ["dingo"; "goomba"; "video-1234"; "video-4321"; "video-3421"]
   |> List.map (fun k -> Var_store.delete k)
   |> Lwt.join
-  >>= fun () -> *)
+  >>= fun () ->
 
-  Var_store.get "dingoz" () >>= fun v ->
-  Lwt_io.printl ("This should not exist: " ^ v) >>= fun () ->
+  Lwt.catch
+    (fun () ->
+      Var_store.get "goomba" () >>= fun v ->
+      Lwt_io.printl ("This should not exist: " ^ v))
+    (function
+      | Not_found -> Lwt_io.printl "goomba not found"
+      | e -> raise e)
+  >>= fun () ->
 
   Lwt_io.printl "test" >>=
   Synker.sync

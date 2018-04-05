@@ -5,7 +5,13 @@ module Video = Video
 open Lwt.Infix
 
 
-module Make (DB : Caqti_lwt.CONNECTION) = struct
+module type Config = sig
+  val db_pool : (Caqti_lwt.connection, Caqti_error.t) Caqti_lwt.Pool.t
+end
+
+
+module Make (Conf : Config) = struct
+  open Conf
 
   type t = Video.t
   
