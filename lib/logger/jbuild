@@ -1,0 +1,6 @@
+(jbuild_version 1)
+
+(library
+  ((name logger)
+   (libraries (sync
+               batteries lwt))))

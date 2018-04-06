@@ -2,5 +2,5 @@
 
 (executable
   ((name main)
-    (libraries (lib jw_client jw_source rdb_dest sync variable_store
+    (libraries (lib logger jw_client jw_source rdb_dest sync variable_store
                 batteries caqti caqti-dynload caqti-lwt lwt))))

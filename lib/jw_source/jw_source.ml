@@ -9,6 +9,7 @@ end
 
 
 module Make (Client : Jw_client.Client)
+            (Log : Sync.Logger)
             (Conf : Config) =
 struct
 
@@ -34,18 +35,23 @@ struct
     Lwt_stream.from (fun () -> 
       (match !videos with 
         | [] -> 
+          Log.info "List empty, getting more from JW" >>= fun () ->
           let params = Jw_client.merge_params
             Conf.params
             ["result_offset", [!offset |> string_of_int]] in
           Client.get_videos_list ~params () >>= fun body ->
+          Log.info "Got next set of videos from JW" >>= fun () ->
           offset := body.offset;
           Lwt.return body.videos
 
         | l -> Lwt.return l
       )
       >>= function
-      | [] -> Lwt.return None
+      | [] ->
+        Log.info "Completed streaming all JW videos." >>= fun () ->
+        Lwt.return None
       | h :: tl ->
+        Log.info "Got video" >>= fun () ->
         videos := tl;
         offset := !offset + 1;
         Lwt.return @@ Some (!offset, h)

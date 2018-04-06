@@ -11,6 +11,27 @@ module type Variable_store = sig
 end
 
 
+type logger_level =
+  [ `Off
+  | `Fatal
+  | `Error
+  | `Warn
+  | `Info
+  | `Debug
+  | `Trace ]
+
+
+module type Logger = sig
+  val log : logger_level -> string -> unit Lwt.t
+  val fatal : ?exn:exn -> string -> unit Lwt.t
+  val error : ?exn:exn -> string -> unit Lwt.t
+  val warn : ?exn:exn -> string -> unit Lwt.t
+  val info : string -> unit Lwt.t
+  val debug : string -> unit Lwt.t
+  val trace : string -> unit Lwt.t
+end
+
+
 module type Source = sig
   type t
   type offset
