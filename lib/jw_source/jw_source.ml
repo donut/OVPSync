@@ -51,7 +51,7 @@ struct
         Log.info "Completed streaming all JW videos." >>= fun () ->
         Lwt.return None
       | h :: tl ->
-        Log.info "Got video" >>= fun () ->
+        Log.infof "Got video [%s] %s" h.key h.title >>= fun () ->
         videos := tl;
         offset := !offset + 1;
         Lwt.return @@ Some (!offset, h)
