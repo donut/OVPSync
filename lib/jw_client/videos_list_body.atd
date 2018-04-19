@@ -1,14 +1,55 @@
 
-type video <ocaml from="Video" t="t"> = abstract
+type status <ocaml from="Response_status" t="t"> = abstract
+type rate_limit <ocaml from="Rate_limit" t="t"> = abstract
 
-type status =
-  [ Ok <json name="ok">
-  | Error <json name="error"> ]
+type media_status =
+  [ Created <json name="created">
+  | Processing <json name="processing"> 
+  | Ready <json name="ready">
+  | Updating <json name="updating">
+  | Failed <json name="failed"> ]
+type mediatype = 
+  [ Unknown <json name="unknown">
+  | Audio <json name="audio">
+  | Video <json name="video"> ]
+type sourcetype = 
+  [ File <json name="file">
+  | URL <json name="url"> ]
+type sourceformat = 
+  [ MP4 <json name="mp4">
+  | WEBM <json name="webm">
+  | FLV <json name="flv">
+  | AAC <json name="aac">
+  | MP3 <json name="mp3">
+  | Vorbis <json name="vorbis">
+  | M3U8 <json name="m3u8">
+  | SMIL <json name="smil"> ]
+type error = { message: string; }
 
-type rate_limit = {
-  reset: int;
-  limit: int;
-  remaining: int;
+type video = {
+  key: string;
+
+  title: string;
+  ?description: string option;
+  ?author: string option;
+
+  status: media_status;
+  ?error: error option;
+  date: int;
+  ?expires_date: int option;
+  updated: int;
+
+  duration: string;
+  ?link: string option;
+  ~tags <ocaml default="\"\"">: string;
+  custom: (string * string) list <json repr="object">;
+
+  sourcetype: sourcetype;
+  mediatype: mediatype;
+  ?sourceformat: sourceformat option;
+  size: int;
+  ?md5: string option;
+  ?upload_session_id: string option;
 }
 
 type t = {

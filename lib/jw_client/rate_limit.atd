@@ -1,0 +1,6 @@
+
+type t = {
+  reset: int;
+  limit: int;
+  remaining: int;
+}

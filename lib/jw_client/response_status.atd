@@ -1,0 +1,4 @@
+
+type t =
+  [ Ok <json name="ok">
+  | Error <json name="error"> ]
