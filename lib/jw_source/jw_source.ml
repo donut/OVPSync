@@ -52,6 +52,55 @@ struct
     let value = changes |> Modified.to_string in
     Var_store.set key value
 
+    
+  let next_set offset =
+    let params = Jw_client.Util.merge_params
+      Conf.params
+      [ "result_offset", [offset |> string_of_int];
+        "statuses_filter", ["ready"] ]
+    in
+    Client.get_videos_list ~params () >>= fun body ->
+    Lwt.return body.videos
+
+
+  let sleep_if_few_left l =
+    let count = List.length l in
+    match 15 - count/3 with
+    | s when s > 0 ->
+      Log.infof "--> Few videos left processing; waiting %d seconds before checking again" s
+      >>= fun () ->
+      Lwt_unix.sleep (s |> float_of_int) 
+    | _ ->  Lwt.return ()
+
+
+  let get_status_and_passthrough media_id =
+    let params = [("cache_break", [Random.bits () |> string_of_int])] in
+
+    match%lwt Jw_client.Delivery.get_media media_id ~params () with
+    | Some { playlist = media :: _ } -> 
+      let passthrough = media.sources |> List.find_opt begin fun s -> 
+        let open Jw_client.V2_media_body_t in
+        match s.label with
+        | None -> false
+        | Some l -> String.lowercase_ascii l = "passthrough"
+      end in
+      Lwt.return (true, passthrough)
+
+    | Some { playlist = [] } -> Lwt.return (true, None)
+    | None -> Lwt.return (false, None)
+
+
+  let publish_video (vid:Jw_client.Platform.videos_list_video) =
+    let tags = vid.tags
+      |> String.split_on_char ','
+      |> List.map String.trim
+      |> (fun l -> Conf.temp_pub_tag :: l)
+      |> String.concat ", "
+    in
+    let params = [("expires_date", [""]); ("tags", [tags])] in
+    Client.videos_update vid.key params
+
+
   let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
     (* 0: Check if video has been updated since last synced to dest *)
     (* 1: Check if video is published and has passthrough *)
@@ -68,25 +117,15 @@ struct
     let videos_to_check = ref [] in
     let processing_videos = ref [] in
 
-    let next_set offset =
-      let params = Jw_client.Util.merge_params
-        Conf.params
-        [ "result_offset", [offset |> string_of_int];
-          "statuses_filter", ["ready"] ]
-      in
-      Client.get_videos_list ~params () >>= fun body ->
-      Lwt.return body.videos
-    in
-
     let rec next () =
       begin match !videos_to_check, !processing_videos with
       | [], [] ->
         Log.info "Getting next set..." >>= fun () ->
         request_offset := !request_offset + (List.length !current_videos_set);
         Log.infof "--> offset: %d" !request_offset >>= fun () ->
-        next_set !request_offset >>= fun vids ->
+        let%lwt vids = next_set !request_offset in
 
-        Log.info "--> done!" >>= fun () ->
+        let%lwt () = Log.info "--> done!" in
         current_videos_set := vids;
         videos_to_check := vids;
         Lwt.return ()
@@ -97,23 +136,14 @@ struct
         Log.info 
           "`videos_to_check` exhausted; reloading with `processing_vidoes`"
         >>= fun () ->
-        (* Lwt_unix.sleep 10. >>= fun () -> *)
         videos_to_check := List.rev !processing_videos;
         processing_videos := [];
-        let count = List.length !videos_to_check in
-        begin match 15 - count/3 with
-        | s when s > 0 ->
-          Log.infof "--> Few videos left processing; waiting %d seconds before checking again" s
-          >>= fun () ->
-          Lwt_unix.sleep (s |> float_of_int) 
-        | _ ->  Lwt.return ()
-        end
+        sleep_if_few_left !videos_to_check 
 
       | _, _
         -> Lwt.return ()
-      end
+      end >>= fun () ->
 
-      >>= fun () ->
       match !videos_to_check with
       | [] -> 
         Log.info "Reached the end of all videos." >>= fun () ->
@@ -130,24 +160,8 @@ struct
         | true ->
           Log.infof "[%s] Getting publish and passthrough status." vid.key
           >>= fun () ->
-          let params = [("cache_break", [Random.bits () |> string_of_int])] in
-          Jw_client.Delivery.get_media vid.key ~params () >>= begin function
-          | Some { playlist = media :: _ } -> 
-            let passthrough = media.sources |> List.find_opt (fun s -> 
-              let open Jw_client.V2_media_body_t in
-              match s.label with
-              | None -> false
-              | Some l -> String.lowercase_ascii l = "passthrough")
-            in
-            Lwt.return (true, passthrough)
 
-          | Some { playlist = [] } ->
-            Lwt.return (true, None)
-          | None ->
-            Lwt.return (false, None)
-          end
-          
-          >>= function 
+          match%lwt get_status_and_passthrough vid.key with
           | true, Some p ->
             Log.infof "[%s] Video is published and has passthrough. RETURNING!"
               vid.key
@@ -158,47 +172,33 @@ struct
             Lwt.return (Some (vid, p.file, thumb))
 
           | published, passthrough ->
-            get_changed vid.key >>= fun previous_changes ->
-            begin match published, previous_changes.expires with
-            | true, _ -> Lwt.return None
+            let%lwt prev_changes = get_changed vid.key in
+
+            begin match published, prev_changes.expires with
+            | true, _ -> Lwt.return prev_changes
             | false, Some _ ->
               Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
-              Lwt.return (Some previous_changes)
+              Lwt.return prev_changes
             | false, None ->
               Log.infof "[%s] Not published; publishing..." vid.key
               >>= fun () ->
-              let changes = Modified.make
-                ?expires:vid.expires_date
-                ~passthrough:previous_changes.passthrough
-                ()
-              in
+              let changes =
+                { prev_changes with expires = vid.expires_date } in
               set_changed vid.key changes >>= fun () ->
-              let tags = vid.tags
-                |> String.split_on_char ','
-                |> List.map String.trim
-                |> (fun l -> Conf.temp_pub_tag :: l)
-                |> String.concat ", "
-              in
-              let params = [("expires_date", [""]); ("tags", [tags])] in
-              Client.videos_update vid.key params >>= fun () ->
-              Lwt.return (Some changes)
-            end
+              publish_video vid >>= fun () ->
+              Lwt.return changes
+            end >>= fun changes ->
 
-            >>= fun changes ->
-            begin match passthrough, previous_changes.passthrough with
+            begin match passthrough, changes.passthrough with
             | Some _, _   -> Lwt.return ()
             | None, true  -> Log.infof "[%s] Waiting on passthrough." vid.key
             | None, false ->
               Log.infof "[%s] No passthrough; creating..." vid.key >>= fun () ->
-              let changes' = match changes with 
-              | Some c -> Modified.make ?expires:c.expires ~passthrough:true ()
-              | None -> Modified.make ~passthrough:true ()
-              in
+              let changes' = { changes with passthrough = true } in
               set_changed vid.key changes' >>= fun () ->
               Client.create_conversion_by_name vid.key "passthrough"
-            end
-            
-            >>= fun () ->
+            end >>= fun () ->
+
             Log.infof "[%s] Adding to processing list. NEXT!" vid.key
             >>= fun () ->
             processing_videos := vid :: !processing_videos;
