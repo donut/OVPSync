@@ -41,12 +41,8 @@ end
 
 module type Source = sig
   type t
-  type offset
 
-  val string_of_offset : offset -> string
-  val offset_of_string : string -> offset
-
-  val make_stream : ?offset:offset -> unit -> (offset * t) Lwt_stream.t
+  val make_stream : should_sync:(t -> bool Lwt.t) -> t Lwt_stream.t
   val cleanup : t -> unit Lwt.t
 end
 
@@ -62,6 +58,7 @@ module type Config = sig
   type dest_t
 
   val dest_t_of_src_t : src_t -> dest_t
+  val should_sync : (src_t -> bool Lwt.t)
 end
 
 
@@ -76,8 +73,8 @@ module Make (Src : Source)
 : Synchronizer =
 struct
   let sync () = 
-    let stream = Src.make_stream () in
-    stream |> Lwt_stream.iter_p (fun (offset, src_item) ->
+    let stream = Src.make_stream ~should_sync:Conf.should_sync in
+    stream |> Lwt_stream.iter_p (fun src_item ->
       let dest_item = Conf.dest_t_of_src_t src_item in
       Dest.save dest_item >>= fun _ ->
       Lwt.return ()

@@ -1,0 +1,52 @@
+
+type status <ocaml from="Response_status" t="t"> = abstract
+type rate_limit <ocaml from="Rate_limit" t="t"> = abstract
+
+type format_key = 
+  [ MP4 <json name="mp4">
+  | AAC <json name="aac">
+  | MP3 <json name="mp3">
+  | Passthrough <json name="passthrough">
+  | Original <json name="original">
+  | OGG <json name="ogg"> 
+  | WEBM <json name="webm">
+  | Vorbis <json name="vorbis">
+  | FLV <json name="flv"> ]
+
+type format = {
+  name : string;
+  key : format_key;
+}
+
+type quality = {
+  ?audio : int option;
+  ?video : int option;
+}
+
+type default =
+  [ Video <json name="video">
+  | Audio <json name="audio">
+  | All <json name="all">
+  | None <json name="none"> ]
+
+type template = {
+  id : int;
+  name : string;
+  key : string;
+  default : default;
+  required : bool;
+  format : format;
+  ?upscale : bool option;
+  ?min_scale_width : int option;
+  ?width : int option;
+  quality : quality;
+}
+
+type t = {
+  status: status;
+  templates: template list;
+  rate_limit: rate_limit;
+  limit: int;
+  offset: int;
+  total: int;
+}

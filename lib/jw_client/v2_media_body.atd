@@ -1,0 +1,39 @@
+
+type source = {
+  ?label : string option;
+  ?type' <json name="type"> : string option;
+
+  file : string;
+  ?width : int option;
+  ?height : int option;
+}
+
+type track = {
+  kind : string;
+  file : string;
+}
+
+type media = {
+  mediaid : string;
+
+  title : string;
+  description : string;
+  pubdate : int;
+  ~tags <ocaml default="\"\""> : string;
+  link : string;
+
+  ?image: string option;
+  sources : source list;
+  tracks : track list;
+  duration : int;
+}
+
+type t = {
+  feed_instance_id : string;
+
+  title : string;
+  description : string;
+  kind : string;
+
+  playlist : media list;
+}
