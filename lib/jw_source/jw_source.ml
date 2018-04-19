@@ -112,7 +112,6 @@ struct
     (* 6: At the end of each set, check permanent list to clean up any times
           not in current list. *)
     (* 7: Move to next set. *)
-    let request_offset = ref 0 in
     let current_videos_set = ref [] in
     let videos_to_check = ref [] in
     let processing_videos = ref [] in
@@ -121,11 +120,17 @@ struct
       begin match !videos_to_check, !processing_videos with
       | [], [] ->
         Log.info "Getting next set..." >>= fun () ->
-        request_offset := !request_offset + (List.length !current_videos_set);
-        Log.infof "--> offset: %d" !request_offset >>= fun () ->
-        let%lwt vids = next_set !request_offset in
 
-        let%lwt () = Log.info "--> done!" in
+        let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
+        let new_offset =
+          (offset |> int_of_string) + (List.length !current_videos_set) in
+        Var_store.set "request_offset" (new_offset |> string_of_int)
+          >>= fun () ->
+        Log.infof "--> offset: %d" new_offset >>= fun () ->
+
+        let%lwt vids = next_set new_offset in
+        Log.info "--> done!" >>= fun () ->
+
         current_videos_set := vids;
         videos_to_check := vids;
         Lwt.return ()
@@ -135,7 +140,7 @@ struct
          * changes? *)
         Log.info 
           "`videos_to_check` exhausted; reloading with `processing_vidoes`"
-        >>= fun () ->
+          >>= fun () ->
         videos_to_check := List.rev !processing_videos;
         processing_videos := [];
         sleep_if_few_left !videos_to_check 
@@ -154,18 +159,16 @@ struct
 
         should_sync (vid, "", "") >>= function
         | false ->
-          Log.infof "[%s] No need to sync. NEXT!" vid.key
-          >>= fun () ->
+          Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
           next ()
         | true ->
           Log.infof "[%s] Getting publish and passthrough status." vid.key
-          >>= fun () ->
+            >>= fun () ->
 
           match%lwt get_status_and_passthrough vid.key with
           | true, Some p ->
             Log.infof "[%s] Video is published and has passthrough. RETURNING!"
-              vid.key
-            >>= fun () ->
+              vid.key >>= fun () ->
             (* @todo Run persistent storage cleanup if [to_check] and 
               * [processing] are empty *)
             let thumb = original_thumb_url vid.key in
@@ -181,7 +184,7 @@ struct
               Lwt.return prev_changes
             | false, None ->
               Log.infof "[%s] Not published; publishing..." vid.key
-              >>= fun () ->
+                >>= fun () ->
               let changes =
                 { prev_changes with expires = vid.expires_date } in
               set_changed vid.key changes >>= fun () ->
@@ -200,7 +203,7 @@ struct
             end >>= fun () ->
 
             Log.infof "[%s] Adding to processing list. NEXT!" vid.key
-            >>= fun () ->
+              >>= fun () ->
             processing_videos := vid :: !processing_videos;
             next ()
     in
