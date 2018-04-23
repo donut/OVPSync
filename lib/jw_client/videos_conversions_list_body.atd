@@ -1,0 +1,49 @@
+
+type status <ocaml from="Response_status" t="t"> = abstract
+type rate_limit <ocaml from="Rate_limit" t="t"> = abstract
+type template_format <ocaml from="Accounts_templates_list_body" t="format">
+  = abstract
+
+type mediatype =
+  [ Audio <json name="audio"> 
+  | Video <json name="video"> ]
+
+type conversion_status =
+  [ Queued
+  | Ready
+  | Failed ]
+
+type template = {
+  key : string;
+  name : string;
+  required : bool;
+  format : template_format;
+}
+
+type link = {
+  protocol : string;
+  address : string;
+  path : string;
+}
+
+type conversion = {
+  key : string;
+  mediatype : mediatype;
+  status : conversion_status;
+  duration : float;
+  filesize : int;
+  width : int;
+  height : int;
+  template : template;
+  ?error : string option;
+  link : link;
+}
+
+type t = {
+  status : status;
+  conversions : conversion list;
+  rate_limit : rate_limit;
+  limit : int;
+  offset : int;
+  total : int;
+}

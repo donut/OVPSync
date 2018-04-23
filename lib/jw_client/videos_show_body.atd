@@ -3,12 +3,8 @@ type status <ocaml from="Response_status" t="t"> = abstract
 type rate_limit <ocaml from="Rate_limit" t="t"> = abstract
 type video <ocaml from="Videos_video" t="t"> = abstract
 
-
 type t = {
   status: status;
-  videos: video list;
   rate_limit: rate_limit;
-  limit: int;
-  offset: int;
-  total: int;
+  video: video ;
 }

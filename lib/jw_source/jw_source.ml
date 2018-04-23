@@ -52,15 +52,20 @@ struct
     let value = changes |> Modified.to_string in
     Var_store.set key value
 
+  let clear_changed media_id =
+    let key = changed_video_key media_id in
+    Log.infof "[%s] Clearing recorded changes for key %s" media_id key
+    >>= fun () ->
+    Var_store.delete key
     
-  let next_set offset =
+  let get_set offset =
     let params = Jw_client.Util.merge_params
       Conf.params
       [ "result_offset", [offset |> string_of_int];
         "statuses_filter", ["ready"] ]
     in
-    Client.get_videos_list ~params () >>= fun body ->
-    Lwt.return body.videos
+    let%lwt { videos } = Client.videos_list ~params () in
+    Lwt.return videos
 
 
   let sleep_if_few_left l =
@@ -90,7 +95,7 @@ struct
     | None -> Lwt.return (false, None)
 
 
-  let publish_video (vid:Jw_client.Platform.videos_list_video) =
+  let publish_video (vid : Jw_client.Platform.videos_list_video) =
     let tags = vid.tags
       |> String.split_on_char ','
       |> List.map String.trim
@@ -128,7 +133,7 @@ struct
           >>= fun () ->
         Log.infof "--> offset: %d" new_offset >>= fun () ->
 
-        let%lwt vids = next_set new_offset in
+        let%lwt vids = get_set new_offset in
         Log.info "--> done!" >>= fun () ->
 
         current_videos_set := vids;
@@ -153,6 +158,7 @@ struct
       | [] -> 
         Log.info "Reached the end of all videos." >>= fun () ->
         Lwt.return None
+
       | vid :: tl ->
         Log.infof "Checking video [%s] %s" vid.key vid.title >>= fun () ->
         videos_to_check := tl;
@@ -211,6 +217,45 @@ struct
     Lwt_stream.from next
 
 
-  let cleanup t = Lwt.return ()
+  let cleanup ((vid, _, _) : t) =
+    Log.infof "Undoing changes to [%s: %s]" vid.key vid.title >>= fun () ->
+    let%lwt { expires; passthrough } = get_changed vid.key in
 
-end
+    begin match expires with 
+    | None -> Lwt.return ()
+    | Some expires_date ->
+      Log.infof "[%s] Undoing publish" vid.key >>= fun () ->
+      match%lwt Client.videos_show vid.key with
+      | None -> Lwt.return ()
+      | Some { video } ->
+        match video.expires_date with
+        | Some _ ->
+          (* Looks like it was set again outside of this application. No need
+           * to set it to the old value *)
+          Lwt.return ()
+        | None ->
+          let tags = vid.tags
+            |> String.split_on_char ','
+            |> List.map String.trim
+            |> List.filter (fun t -> not (t = Conf.temp_pub_tag))
+            |> String.concat ", "
+          in
+          let params =
+            [ ("expires_date", [expires_date |> string_of_int])
+            ; ("tags", [tags]) ]
+          in
+          Client.videos_update vid.key params
+    end >>= fun () ->
+
+    
+    begin if passthrough then
+      Log.infof "[%s] Deleting passthrough conversion" vid.key >>= fun () ->
+      Client.delete_conversion_by_name vid.key "passthrough"
+    else
+      Lwt.return ()
+    end >>= fun () ->
+
+    clear_changed vid.key >>= fun () ->
+    Log.infof "[%s] Undid all changes" vid.key
+    
+  end

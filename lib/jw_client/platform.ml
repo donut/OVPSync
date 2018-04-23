@@ -7,10 +7,15 @@ module C = Cohttp
 module Clwt = Cohttp_lwt
 module Clu = Cohttp_lwt_unix
 
-type videos_list_body = Videos_list_body_t.t
-type videos_list_video = Videos_list_body_t.video
 type accounts_templates_list_body = Accounts_templates_list_body_t.t
 type accounts_templates_list_template = Accounts_templates_list_body_t.template
+type videos_conversions_list_body = Videos_conversions_list_body_t.t
+type videos_conversions_list_conversion
+  = Videos_conversions_list_body_t.conversion
+type videos_list_body = Videos_list_body_t.t
+type videos_list_video = Videos_video_t.t
+type videos_show_body = Videos_show_body_t.t
+
 type param = string * string list
 
 let api_prefix_url = "https://api.jwplatform.com/v1"
@@ -23,12 +28,14 @@ end
 module type Client = sig
   val call : string -> ?params : param list -> unit
              -> (C.Response.t * Clwt.Body.t) Lwt.t
-  val get_accounts_templates_list : ?params : param list -> unit
+  val accounts_templates_list : ?params : param list -> unit
                                     -> accounts_templates_list_body Lwt.t
-  val get_videos_list : ?params : param list -> unit -> videos_list_body Lwt.t
+  val videos_list : ?params : param list -> unit -> videos_list_body Lwt.t
+  val videos_show : string -> videos_show_body option Lwt.t
   val videos_update : string -> param list -> unit Lwt.t
   val videos_conversions_create : string -> string -> unit Lwt.t
   val create_conversion_by_name : string -> string -> unit Lwt.t
+  val delete_conversion_by_name : string -> string -> unit Lwt.t
 end
 
 
@@ -57,7 +64,6 @@ module Make (Conf : Config) : Client = struct
         | ':' -> "%3A" 
         | c -> BatString.of_char c)
     in
-    print_endline @@ sprintf "[%s]" query;
     let signature = Sha1.(string (query ^ Conf.secret) |> to_hex) in
     ("api_signature", [signature]) :: params
 
@@ -78,9 +84,6 @@ module Make (Conf : Config) : Client = struct
     let status_str = status |> C.Code.string_of_status in
     Lwt_io.printlf "--> Response status: %s" status_str >>= fun () ->
 
-    (* Lwt_io.printlf "Headers: %s" (resp |> C.Response.headers |> C.Header.to_string)
-    >>= fun () -> *)
-
     match status with
     | `Too_many_requests ->
       (* Wait and try again once the limit has reset *)
@@ -98,25 +101,39 @@ module Make (Conf : Config) : Client = struct
     | _ ->
       Lwt.return (resp, body)
 
-  let get_accounts_templates_list ?params () =
-    call "/accounts/templates/list" ?params () >>= fun (resp, body) ->
+  let accounts_templates_list ?params () =
+    let%lwt (resp, body) = call "/accounts/templates/list" ?params () in
     begin match C.Response.status resp with
     | `OK -> Lwt.return ()
     |   s -> unexpected_response_status_exn resp body >>= raise
     end >>= fun () ->
-    Clwt.Body.to_string body >>= fun body ->
-    Accounts_templates_list_body_j.t_of_string body |> Lwt.return
+    let%lwt body' = Clwt.Body.to_string body in
+    Lwt.return @@ Accounts_templates_list_body_j.t_of_string body'
 
   (** [get_videos_list ?params ()] Makes a request to the [/videos/list] 
       endpoint and returns the parsed response. *)
-  let get_videos_list ?params () =
-    call "/videos/list" ?params () >>= fun (_resp, body) ->
-    Clwt.Body.to_string body >>= fun body ->
-    Videos_list_body_j.t_of_string body |> Lwt.return
+  let videos_list ?params () =
+    let%lwt (resp, body) = call "/videos/list" ?params () in
+    match C.Response.status resp with
+    | `OK ->
+      let%lwt body' = Clwt.Body.to_string body in
+      Lwt.return @@ Videos_list_body_j.t_of_string body'
+    | s -> unexpected_response_status_exn resp body >>= raise
+
+  let videos_show media_id =
+    let%lwt (resp, body) =
+      call "/videos/show" ~params:[("video_key", [media_id])] ()
+    in
+    match C.Response.status resp with
+    | `Not_found -> Lwt.return None
+    | `OK ->
+      let%lwt body' = Clwt.Body.to_string body in
+      Lwt.return @@ Some (Videos_show_body_j.t_of_string body')
+    | s -> unexpected_response_status_exn resp body >>= raise
 
   let videos_update key params =
     let params' = merge_params [("video_key", [key])] params in
-    call "/videos/update" ~params:params' () >>= fun (resp, body) ->
+    let%lwt (resp, body) = call "/videos/update" ~params:params' () in
 
     match C.Response.status resp with
     | `OK -> Lwt.return ()
@@ -127,19 +144,46 @@ module Make (Conf : Config) : Client = struct
       [ ("video_key", [media_id]);
         ("template_key", [template_key]) ]
     in
-    call "/videos/conversions/create" ~params () >>= fun (resp, body) ->
+    let%lwt (resp, body) = call "/videos/conversions/create" ~params () in
     match C.Response.status resp with
     | `OK 
     | `Conflict (* already exists *) -> Lwt.return ()
     | s -> unexpected_response_status_exn resp body >>= raise
 
+  let videos_conversions_list media_id =
+    (* Leaving parameters `result_limit` and `result_offset` uncustomizable
+     * as 1000 should way more than cover the possibilities for us at JW. *)
+    let params = [("video_key", [media_id]); ("result_limit", ["1000"])] in
+    let%lwt (resp, body) = call "/videos/conversions/list" ~params () in
+    match C.Response.status resp with
+    | `OK ->
+      let%lwt body' = Clwt.Body.to_string body in
+      Lwt.return @@ Videos_conversions_list_body_j.t_of_string body'
+    | s -> unexpected_response_status_exn resp body >>= raise
+
+  let videos_conversions_delete key =
+    let params = [("conversion_key", [key])] in
+    let%lwt (resp, body) = call "/videos/conversions/delete" ~params () in
+    match C.Response.status resp with
+    | `OK -> Lwt.return ()
+    | s -> unexpected_response_status_exn resp body >>= raise
 
   let create_conversion_by_name media_id template_name =
-    get_accounts_templates_list () >>= fun body ->
+    let%lwt body = accounts_templates_list () in
     let name = String.lowercase_ascii template_name in
     let template = body.templates |> List.find begin fun t ->
       let open Accounts_templates_list_body_t in
       String.lowercase_ascii t.name = name
     end in
     videos_conversions_create media_id template.key
+  
+  let delete_conversion_by_name media_id template_name = 
+    let%lwt body = videos_conversions_list media_id in
+    let name = String.lowercase_ascii template_name in
+    let conversion = body.conversions |> List.find begin fun c ->
+      let open Videos_conversions_list_body_t in
+      String.lowercase_ascii c.template.name = name
+    end in
+    videos_conversions_delete conversion.key
+
 end
