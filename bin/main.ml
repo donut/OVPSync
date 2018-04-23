@@ -34,7 +34,8 @@ let main () =
 
   let module JW_src = Jw_source.Make(JW)(JW_var_store)(Log_jw)(struct
     let params = ["result_limit", ["10"]] 
-    let temp_pub_tag = "OVPSync: Temporarily Published"
+    let temp_pub_tag = "Temporarily Published"
+    let backup_expires_field = "ovp_sync.backup_expires_date"
   end) in
 
   let module Log_pdest = Logger.Make(struct

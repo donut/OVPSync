@@ -24,6 +24,7 @@ end
 module type Config = sig
   val params : Jw_client.Platform.param list
   val temp_pub_tag : string
+  val backup_expires_field : string
 end
 
 
@@ -102,7 +103,14 @@ struct
       |> (fun l -> Conf.temp_pub_tag :: l)
       |> String.concat ", "
     in
-    let params = [("expires_date", [""]); ("tags", [tags])] in
+    let backup_expires_field = "custom." ^ Conf.backup_expires_field in
+    let expires_date = BatOption.map_default string_of_int "" vid.expires_date
+    in
+    let params =
+      [ ("expires_date", [""])
+      ; (backup_expires_field, [expires_date])
+      ; ("tags", [tags]) ]
+    in
     Client.videos_update vid.key params
 
 
@@ -240,13 +248,15 @@ struct
             |> List.filter (fun t -> not (t = Conf.temp_pub_tag))
             |> String.concat ", "
           in
+          (* "-" prefix tells JW to remove the custom field *)
+          let backup_expires_field = "custom.-" ^ Conf.backup_expires_field in
           let params =
             [ ("expires_date", [expires_date |> string_of_int])
+            ; (backup_expires_field, [""])
             ; ("tags", [tags]) ]
           in
           Client.videos_update vid.key params
     end >>= fun () ->
-
     
     begin if passthrough then
       Log.infof "[%s] Deleting passthrough conversion" vid.key >>= fun () ->
