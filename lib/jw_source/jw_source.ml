@@ -18,6 +18,9 @@ module Modified = struct
 
   let to_string t =
     t |> sexp_of_t |> Sexplib.Sexp.to_string
+
+  let of_string s =
+    s |> Sexplib.Sexp.of_string |> t_of_sexp
 end
 
 
@@ -46,7 +49,7 @@ struct
     let key = changed_video_key media_id in
     Var_store.get_opt key >>= function
     | None   -> Lwt.return @@ Modified.make ~passthrough:false ()
-    | Some v -> Lwt.return @@ Modified.t_of_sexp @@ Sexplib.Sexp.of_string v
+    | Some v -> Lwt.return @@ Modified.of_string v
 
   let set_changed media_id changes =
     let key = changed_video_key media_id in
@@ -55,8 +58,6 @@ struct
 
   let clear_changed media_id =
     let key = changed_video_key media_id in
-    Log.infof "[%s] Clearing recorded changes for key %s" media_id key
-    >>= fun () ->
     Var_store.delete key
     
   let get_set offset =
@@ -114,6 +115,76 @@ struct
     Client.videos_update vid.key params
 
 
+  let cleanup_by_media_id media_id ?changed () =
+    Log.infof "Undoing changes to [%s]" media_id >>= fun () ->
+    let%lwt { expires; passthrough } = match changed with 
+    | None -> get_changed media_id
+    | Some c -> Lwt.return c 
+    in
+
+    begin match expires with 
+    | None -> Lwt.return ()
+    | Some expires_date ->
+      Log.infof "[%s] Undoing publish" media_id >>= fun () ->
+      match%lwt Client.videos_show media_id with
+      | None -> Lwt.return ()
+      | Some { video } ->
+        (* Make sure we have the latest expires date in case it was set
+         * outside of this program. *)
+        let expires_date' = match video.expires_date with
+        | Some e -> e
+        | None -> expires_date
+        in
+        let tags = video.tags
+          |> String.split_on_char ','
+          |> List.map String.trim
+          |> List.filter (fun t -> not (t = Conf.temp_pub_tag))
+          |> String.concat ", "
+        in
+        (* "-" prefix tells JW to remove the custom field *)
+        let backup_expires_field = "custom.-" ^ Conf.backup_expires_field in
+        let params =
+          [ ("expires_date", [expires_date' |> string_of_int])
+          ; (backup_expires_field, [""])
+          ; ("tags", [tags]) ]
+        in
+        Client.videos_update media_id params
+    end >>= fun () ->
+    
+    begin if passthrough then
+      Log.infof "[%s] Deleting passthrough conversion" media_id >>= fun () ->
+      Client.delete_conversion_by_name media_id "passthrough"
+    else
+      Lwt.return ()
+    end >>= fun () ->
+
+    clear_changed media_id >>= fun () ->
+    Log.infof "[%s] Undid all changes" media_id
+
+
+  let cleanup ((vid, _, _) : t) = cleanup_by_media_id vid.key ()
+
+
+  let cleanup_old_changes ~exclude ?(min_age=0) () = 
+    let now = Unix.time () |> int_of_float in
+    let prefix = changed_video_key "" in
+    let pattern = changed_video_key "%" in
+    let%lwt changed_list = Var_store.get_like pattern in
+
+    changed_list
+    |> List.map (fun (key, changes) ->
+      let (_, media_id) = BatString.replace ~str:key ~sub:prefix ~by:"" in
+      (media_id, changes))
+    |> List.filter (fun (media_id, _) ->
+      BatOption.is_none @@ List.find_opt ((=) media_id) exclude)
+    |> List.map (fun (media_id, changes) ->
+      (media_id, Modified.of_string changes))
+    |> List.filter (fun ((_, { timestamp }) : string * Modified.t) ->
+        (now - timestamp) > min_age)
+    |> Lwt_list.iter_p (fun (media_id, changed) ->
+      cleanup_by_media_id media_id ~changed ())
+
+
   let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
     (* 0: Check if video has been updated since last synced to dest *)
     (* 1: Check if video is published and has passthrough *)
@@ -133,7 +204,6 @@ struct
       begin match !videos_to_check, !processing_videos with
       | [], [] ->
         Log.info "Getting next set..." >>= fun () ->
-
         let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
         let new_offset =
           (offset |> int_of_string) + (List.length !current_videos_set) in
@@ -142,11 +212,16 @@ struct
         Log.infof "--> offset: %d" new_offset >>= fun () ->
 
         let%lwt vids = get_set new_offset in
-        Log.info "--> done!" >>= fun () ->
 
         current_videos_set := vids;
         videos_to_check := vids;
-        Lwt.return ()
+        Log.info "--> done!" >>= fun () ->
+
+        Log.info "Cleaning up old changes..." >>= fun () ->
+        let exclude = !videos_to_check
+          |> List.map (fun (v : Jw_client.Platform.videos_list_video) -> v.key)
+        in
+        cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
 
       | [], _ -> 
         (* @todo Is this the place to refresh the current set in case of
@@ -225,47 +300,4 @@ struct
     Lwt_stream.from next
 
 
-  let cleanup ((vid, _, _) : t) =
-    Log.infof "Undoing changes to [%s: %s]" vid.key vid.title >>= fun () ->
-    let%lwt { expires; passthrough } = get_changed vid.key in
-
-    begin match expires with 
-    | None -> Lwt.return ()
-    | Some expires_date ->
-      Log.infof "[%s] Undoing publish" vid.key >>= fun () ->
-      match%lwt Client.videos_show vid.key with
-      | None -> Lwt.return ()
-      | Some { video } ->
-        match video.expires_date with
-        | Some _ ->
-          (* Looks like it was set again outside of this application. No need
-           * to set it to the old value *)
-          Lwt.return ()
-        | None ->
-          let tags = vid.tags
-            |> String.split_on_char ','
-            |> List.map String.trim
-            |> List.filter (fun t -> not (t = Conf.temp_pub_tag))
-            |> String.concat ", "
-          in
-          (* "-" prefix tells JW to remove the custom field *)
-          let backup_expires_field = "custom.-" ^ Conf.backup_expires_field in
-          let params =
-            [ ("expires_date", [expires_date |> string_of_int])
-            ; (backup_expires_field, [""])
-            ; ("tags", [tags]) ]
-          in
-          Client.videos_update vid.key params
-    end >>= fun () ->
-    
-    begin if passthrough then
-      Log.infof "[%s] Deleting passthrough conversion" vid.key >>= fun () ->
-      Client.delete_conversion_by_name vid.key "passthrough"
-    else
-      Lwt.return ()
-    end >>= fun () ->
-
-    clear_changed vid.key >>= fun () ->
-    Log.infof "[%s] Undid all changes" vid.key
-    
-  end
+end
