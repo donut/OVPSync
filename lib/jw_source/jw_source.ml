@@ -41,7 +41,8 @@ module Make (Client : Jw_client.Platform.Client)
             (Conf : Config) =
 struct
 
-  type t = Jw_client.Platform.videos_list_video * string * string
+  type videos_list_video = Jw_client.Platform.videos_list_video
+  type t = videos_list_video * string * string
 
   let changed_video_key media_id = "video-changed-" ^ media_id
 
@@ -71,13 +72,15 @@ struct
 
 
   let sleep_if_few_left l =
-    let count = List.length l in
-    match 15 - count/3 with
-    | s when s > 0 ->
-      Log.infof "--> Few videos left processing; waiting %d seconds before checking again" s
-      >>= fun () ->
-      Lwt_unix.sleep (s |> float_of_int) 
-    | _ ->  Lwt.return ()
+    match List.length l with
+    | 0 -> Lwt.return ()
+    | count ->
+      match 15 - count/3 with
+      | s when s > 0 ->
+        Log.infof "--> Few videos left processing; waiting %d seconds before checking again" s
+        >>= fun () ->
+        Lwt_unix.sleep (s |> float_of_int) 
+      | _ ->  Lwt.return ()
 
 
   let get_status_and_passthrough media_id =
@@ -219,18 +222,31 @@ struct
 
         Log.info "Cleaning up old changes..." >>= fun () ->
         let exclude = !videos_to_check
-          |> List.map (fun (v : Jw_client.Platform.videos_list_video) -> v.key)
+          |> List.map (fun (v : videos_list_video) -> v.key)
         in
         cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
 
       | [], _ -> 
-        (* @todo Is this the place to refresh the current set in case of
-         * changes? *)
-        Log.info 
-          "`videos_to_check` exhausted; reloading with `processing_vidoes`"
-          >>= fun () ->
-        videos_to_check := List.rev !processing_videos;
+        Log.info "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again..."
+        >>= fun () ->
+
+        (* Be sure we grab any updates that happened outside this program 
+         * during the last pass. *)
+        let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
+        let%lwt vids = get_set (offset |> int_of_string) in
+        let returned_videos = !current_videos_set
+          |> List.filter (fun (c : videos_list_video) ->
+            BatOption.is_none @@ List.find_opt
+              (fun (p : videos_list_video) -> p.key = c.key) !processing_videos)
+        in
+
+        current_videos_set := vids;
+        videos_to_check := vids 
+          |> List.filter (fun (v : videos_list_video) ->
+            BatOption.is_none @@ List.find_opt
+              (fun (r : videos_list_video) -> r.key = v.key) returned_videos);
         processing_videos := [];
+
         sleep_if_few_left !videos_to_check 
 
       | _, _
