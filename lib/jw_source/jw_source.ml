@@ -44,6 +44,7 @@ struct
   type videos_list_video = Jw_client.Platform.videos_list_video
   type t = videos_list_video * string * string
 
+
   let changed_video_key media_id = "video-changed-" ^ media_id
 
   let get_changed media_id =
@@ -60,12 +61,13 @@ struct
   let clear_changed media_id =
     let key = changed_video_key media_id in
     Var_store.delete key
+
     
   let get_set offset =
     let params = Jw_client.Util.merge_params
       Conf.params
-      [ "result_offset", [offset |> string_of_int];
-        "statuses_filter", ["ready"] ]
+      [ "result_offset", [offset |> string_of_int]
+      ; "statuses_filter", ["ready"] ]
     in
     let%lwt { videos } = Client.videos_list ~params () in
     Lwt.return videos
@@ -188,6 +190,18 @@ struct
       cleanup_by_media_id media_id ~changed ())
 
 
+  let refresh_current_videos_set ~returned =
+    let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
+    let%lwt vids = get_set (offset |> int_of_string) in
+    let to_check = vids 
+      |> List.filter (fun (v : videos_list_video) ->
+        BatOption.is_none @@ List.find_opt
+          (fun (r : videos_list_video) -> r.key = v.key) returned)
+    in
+
+    Lwt.return (vids, to_check)
+
+
   let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
     (* 0: Check if video has been updated since last synced to dest *)
     (* 1: Check if video is published and has passthrough *)
@@ -206,45 +220,56 @@ struct
     let rec next () =
       begin match !videos_to_check, !processing_videos with
       | [], [] ->
-        Log.info "Getting next set..." >>= fun () ->
-        let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
-        let new_offset =
-          (offset |> int_of_string) + (List.length !current_videos_set) in
-        Var_store.set "request_offset" (new_offset |> string_of_int)
-          >>= fun () ->
-        Log.infof "--> offset: %d" new_offset >>= fun () ->
+        (* Check for new videos at the current offset in case more were 
+         * added (or some removed, pushing more into the current offset) in 
+         * the time it took to process the current set *)
+        let returned = !current_videos_set in
+        begin match%lwt refresh_current_videos_set ~returned with
+        | _, [] ->
+          Log.info "Getting next set..." >>= fun () ->
+          let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
+          let new_offset =
+            (offset |> int_of_string) + (List.length !current_videos_set) in
+          Var_store.set "request_offset" (new_offset |> string_of_int)
+            >>= fun () ->
+          Log.infof "--> offset: %d" new_offset >>= fun () ->
 
-        let%lwt vids = get_set new_offset in
+          let%lwt vids = get_set new_offset in
 
-        current_videos_set := vids;
-        videos_to_check := vids;
-        Log.info "--> done!" >>= fun () ->
+          current_videos_set := vids;
+          videos_to_check := vids;
+          Log.info "--> done!" >>= fun () ->
 
-        Log.info "Cleaning up old changes..." >>= fun () ->
-        let exclude = !videos_to_check
-          |> List.map (fun (v : videos_list_video) -> v.key)
-        in
-        cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
+          Log.info "Cleaning up old changes..." >>= fun () ->
+          let exclude = !videos_to_check
+            |> List.map (fun (v : videos_list_video) -> v.key)
+          in
+          cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
+
+        | refreshed_set, refreshed_to_check ->
+          Log.info "Returned all vidoes in current set, but more were added at the current offset during that time. Processing those..." 
+            >>= fun () ->
+          current_videos_set := refreshed_set;
+          videos_to_check := refreshed_to_check;
+          Lwt.return ()
+        end
 
       | [], _ -> 
         Log.info "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again..."
-        >>= fun () ->
-
+          >>= fun () ->
         (* Be sure we grab any updates that happened outside this program 
          * during the last pass. *)
-        let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
-        let%lwt vids = get_set (offset |> int_of_string) in
         let returned_videos = !current_videos_set
           |> List.filter (fun (c : videos_list_video) ->
             BatOption.is_none @@ List.find_opt
               (fun (p : videos_list_video) -> p.key = c.key) !processing_videos)
         in
+        let%lwt (refreshed_set, refreshed_to_check) =
+          refresh_current_videos_set ~returned:returned_videos 
+        in
 
-        current_videos_set := vids;
-        videos_to_check := vids 
-          |> List.filter (fun (v : videos_list_video) ->
-            BatOption.is_none @@ List.find_opt
-              (fun (r : videos_list_video) -> r.key = v.key) returned_videos);
+        current_videos_set := refreshed_set;
+        videos_to_check := refreshed_to_check;
         processing_videos := [];
 
         sleep_if_few_left !videos_to_check 
