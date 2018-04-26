@@ -23,6 +23,7 @@ let api_prefix_url = "https://api.jwplatform.com/v1"
 module type Config = sig
   val key : string
   val secret : string
+  val rate_limit_to_leave : int
 end
 
 module type Client = sig
@@ -44,6 +45,9 @@ end
 
 
 module Make (Conf : Config) : Client = struct
+
+  let rate_limit_reset = ref 0.
+  let rate_limit_remaining = ref 60 (* Default JW rate limit *)
 
   (** [gen_required_params ()] generates the required parameters for an API
       call *)
@@ -75,6 +79,17 @@ module Make (Conf : Config) : Client = struct
   (** [call path ?params ()] Make a request to the endpoint at [path] with
       [params] as the query string. *)
   let rec call path ?(params=[]) () =
+    (* Avoid using up the rate limit, leaving some for other applications *)
+    let now = Unix.time () in
+    begin if now < !rate_limit_reset
+        && !rate_limit_remaining <= Conf.rate_limit_to_leave then
+      Lwt_io.printlf "Leaving %d API hits; waiting %.1f seconds for reset..."
+        !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
+      Lwt_unix.sleep (!rate_limit_reset -. now)
+    else
+      Lwt.return () 
+    end >>= fun () ->
+
     let params' = merge_params (gen_required_params ()) params in
     let signed = sign_query params' in
     let query = Uri.encoded_of_query signed in
@@ -88,18 +103,23 @@ module Make (Conf : Config) : Client = struct
     Lwt_io.printlf "[GOT %s]\n--> %s" uri_str status_str
       >>= fun () ->
 
+    let h = resp |> C.Response.headers in
+    rate_limit_reset := C.Header.get h "x-ratelimit-reset" 
+      |> BatOption.map_default float_of_string_opt None
+      |> BatOption.default 0.;
+    rate_limit_remaining := C.Header.get h "x-ratelimit-remaining"
+      |> BatOption.map_default int_of_string_opt None
+      |> BatOption.default 0;
+
+    Lwt_io.printlf "%d API hits remaining; Rate limit reset at %.1f;"
+      !rate_limit_remaining !rate_limit_reset >>= fun () ->
+
     match status with
     | `Too_many_requests ->
       (* Wait and try again once the limit has reset *)
-      let h = resp |> C.Response.headers in
-      let reset =  match C.Header.get h "x-ratelimit-reset" with
-        | None -> 60.
-        | Some r -> match float_of_string_opt r with
-          | None -> 60.
-          | Some r -> BatFloat.max (r -. Unix.time ()) 1.
-      in
-      Lwt_io.printlf "--> Rate limit hit. Retrying in %f.1 second(s)..." reset
-      >>= fun () ->
+      let reset = BatFloat.max (!rate_limit_reset -. Unix.time ()) 1. in
+      Lwt_io.printlf "--> Rate limit hit. Retrying in %.1f second(s)..." reset
+        >>= fun () ->
       Lwt_unix.sleep reset >>= fun () ->
       call path ~params ()
     | _ ->

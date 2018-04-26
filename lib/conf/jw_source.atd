@@ -1,5 +1,6 @@
 
 type t = {
-  key: string;
-  secret: string;
+  key : string;
+  secret : string;
+  rate_limit_to_leave : int;
 }

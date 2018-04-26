@@ -20,6 +20,7 @@ let main () =
   let module JW = Jw_client.Platform.Make(struct 
     let key = Conf.JW_source.key conf
     let secret = Conf.JW_source.secret conf
+    let rate_limit_to_leave = Conf.JW_source.rate_limit_to_leave conf
   end) in
 
   let module JW_var_store = Variable_store.Make(struct
