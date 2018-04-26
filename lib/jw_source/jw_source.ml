@@ -159,7 +159,9 @@ struct
     
     begin if passthrough then
       Log.infof "[%s] Deleting passthrough conversion" media_id >>= fun () ->
-      Client.delete_conversion_by_name media_id "passthrough"
+      try%lwt Client.delete_conversion_by_name media_id "passthrough" with
+      (* Likely deleted outside this program. *)
+      | Not_found -> Lwt.return () 
     else
       Lwt.return ()
     end >>= fun () ->
