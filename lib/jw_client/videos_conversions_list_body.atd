@@ -14,6 +14,7 @@ type conversion_status =
   | Failed ]
 
 type template = {
+  id : int;
   key : string;
   name : string;
   required : bool;

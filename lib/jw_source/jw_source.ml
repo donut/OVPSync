@@ -41,8 +41,9 @@ module Make (Client : Jw_client.Platform.Client)
             (Conf : Config) =
 struct
 
-  type videos_list_video = Jw_client.Platform.videos_list_video
-  type t = videos_list_video * string * string
+  type videos_video = Jw_client.Platform.videos_list_video
+  type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
+  type t = videos_video * string * string
 
 
   let changed_video_key media_id = "video-changed-" ^ media_id
@@ -194,9 +195,9 @@ struct
     let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
     let%lwt vids = get_set (offset |> int_of_string) in
     let to_check = vids 
-      |> List.filter (fun (v : videos_list_video) ->
+      |> List.filter (fun (v : videos_video) ->
         BatOption.is_none @@ List.find_opt
-          (fun (r : videos_list_video) -> r.key = v.key) returned)
+          (fun (r : videos_video) -> r.key = v.key) returned)
     in
 
     Lwt.return (vids, to_check)
@@ -242,7 +243,7 @@ struct
 
           Log.info "Cleaning up old changes..." >>= fun () ->
           let exclude = !videos_to_check
-            |> List.map (fun (v : videos_list_video) -> v.key)
+            |> List.map (fun (v : videos_video) -> v.key)
           in
           cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
 
@@ -260,9 +261,9 @@ struct
         (* Be sure we grab any updates that happened outside this program 
          * during the last pass. *)
         let returned_videos = !current_videos_set
-          |> List.filter (fun (c : videos_list_video) ->
+          |> List.filter (fun (c : videos_video) ->
             BatOption.is_none @@ List.find_opt
-              (fun (p : videos_list_video) -> p.key = c.key) !processing_videos)
+              (fun (p : videos_video) -> p.key = c.key) !processing_videos)
         in
         let%lwt (refreshed_set, refreshed_to_check) =
           refresh_current_videos_set ~returned:returned_videos 
@@ -326,14 +327,38 @@ struct
               Lwt.return changes
             end >>= fun changes ->
 
-            begin match passthrough, changes.passthrough with
-            | Some _, _   -> Lwt.return ()
-            | None, true  -> Log.infof "[%s] Waiting on passthrough." vid.key
-            | None, false ->
-              Log.infof "[%s] No passthrough; creating..." vid.key >>= fun () ->
-              let changes' = { changes with passthrough = true } in
-              set_changed vid.key changes' >>= fun () ->
-              Client.create_conversion_by_name vid.key "passthrough"
+            begin match passthrough with
+            | Some _ -> Lwt.return ()
+            | None ->
+              begin if changes.passthrough then
+                let%lwt { conversions }
+                  = Client.videos_conversions_list vid.key
+                in
+                let passthrough = conversions
+                  |> List.find_opt (fun (c : videos_conversion) ->
+                    String.lowercase_ascii c.template.name = "passthrough")
+                in
+                match passthrough with
+                | None -> Lwt.return true
+                | Some { status = `Failed; key = k } ->
+                  Log.errorf "[%s] Passthrough conversion creation failed"  
+                    vid.key >>= fun () ->
+                  Client.videos_conversions_delete k >>= fun () ->
+                  Lwt.return true
+                | _ ->
+                  Lwt.return false
+              else
+                Lwt.return true
+              end >>= fun needs_passthrough ->
+
+              if needs_passthrough then
+                Log.infof "[%s] No passthrough; creating..." vid.key
+                  >>= fun () ->
+                let changes' = { changes with passthrough = true } in
+                set_changed vid.key changes' >>= fun () ->
+                Client.create_conversion_by_name vid.key "passthrough"
+              else
+                Log.infof "[%s] Waiting on passthrough." vid.key
             end >>= fun () ->
 
             Log.infof "[%s] Adding to processing list. NEXT!" vid.key

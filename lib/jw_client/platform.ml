@@ -28,12 +28,16 @@ end
 module type Client = sig
   val call : string -> ?params : param list -> unit
              -> (C.Response.t * Clwt.Body.t) Lwt.t
+
   val accounts_templates_list : ?params : param list -> unit
                                     -> accounts_templates_list_body Lwt.t
+  val videos_conversions_create : string -> string -> unit Lwt.t
+  val videos_conversions_delete : string -> unit Lwt.t
+  val videos_conversions_list : string -> videos_conversions_list_body Lwt.t
   val videos_list : ?params : param list -> unit -> videos_list_body Lwt.t
   val videos_show : string -> videos_show_body option Lwt.t
   val videos_update : string -> param list -> unit Lwt.t
-  val videos_conversions_create : string -> string -> unit Lwt.t
+
   val create_conversion_by_name : string -> string -> unit Lwt.t
   val delete_conversion_by_name : string -> string -> unit Lwt.t
 end
@@ -137,28 +141,31 @@ module Make (Conf : Config) : Client = struct
 
     match C.Response.status resp with
     | `OK -> Lwt.return ()
-    |   s -> unexpected_response_status_exn resp body >>= raise
+    | `Not_found -> raise Not_found
+    |  s -> unexpected_response_status_exn resp body >>= raise
 
   let videos_conversions_create media_id template_key =
     let params = 
-      [ ("video_key", [media_id]);
-        ("template_key", [template_key]) ]
+      [ ("video_key", [media_id])
+      ; ("template_key", [template_key]) ]
     in
     let%lwt (resp, body) = call "/videos/conversions/create" ~params () in
     match C.Response.status resp with
     | `OK 
     | `Conflict (* already exists *) -> Lwt.return ()
+    | `Not_found -> raise Not_found
     | s -> unexpected_response_status_exn resp body >>= raise
 
   let videos_conversions_list media_id =
     (* Leaving parameters `result_limit` and `result_offset` uncustomizable
-     * as 1000 should way more than cover the possibilities for us at JW. *)
+     * as 1000 should way more than cover the possibilities for us at RTM. *)
     let params = [("video_key", [media_id]); ("result_limit", ["1000"])] in
     let%lwt (resp, body) = call "/videos/conversions/list" ~params () in
     match C.Response.status resp with
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Videos_conversions_list_body_j.t_of_string body'
+    | `Not_found -> raise Not_found
     | s -> unexpected_response_status_exn resp body >>= raise
 
   let videos_conversions_delete key =
@@ -166,6 +173,7 @@ module Make (Conf : Config) : Client = struct
     let%lwt (resp, body) = call "/videos/conversions/delete" ~params () in
     match C.Response.status resp with
     | `OK -> Lwt.return ()
+    | `Not_found -> raise Not_found
     | s -> unexpected_response_status_exn resp body >>= raise
 
   let create_conversion_by_name media_id template_name =
