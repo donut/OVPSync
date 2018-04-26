@@ -226,8 +226,11 @@ struct
         (* Check for new videos at the current offset in case more were 
          * added (or some removed, pushing more into the current offset) in 
          * the time it took to process the current set *)
-        let returned = !current_videos_set in
-        begin match%lwt refresh_current_videos_set ~returned with
+        let%lwt refreshed = match !current_videos_set with
+        | [] -> Lwt.return ([], [])
+        | returned -> refresh_current_videos_set ~returned
+        in
+        begin match refreshed with
         | _, [] ->
           Log.info "Getting next set..." >>= fun () ->
           let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
