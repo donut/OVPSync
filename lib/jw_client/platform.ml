@@ -83,7 +83,7 @@ module Make (Conf : Config) : Client = struct
     let now = Unix.time () in
     begin if now < !rate_limit_reset
         && !rate_limit_remaining <= Conf.rate_limit_to_leave then
-      Lwt_io.printlf "Leaving %d API hits; waiting %.1f seconds for reset..."
+      Lwt_io.printlf "Leaving %d API hits; waiting %.0f seconds for reset..."
         !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
       Lwt_unix.sleep (!rate_limit_reset -. now)
     else
@@ -111,14 +111,14 @@ module Make (Conf : Config) : Client = struct
       |> BatOption.map_default int_of_string_opt None
       |> BatOption.default 0;
 
-    Lwt_io.printlf "%d API hits remaining; Rate limit reset at %.1f;"
+    Lwt_io.printlf "%d API hits remaining; Rate limit reset at %.0f;"
       !rate_limit_remaining !rate_limit_reset >>= fun () ->
 
     match status with
     | `Too_many_requests ->
       (* Wait and try again once the limit has reset *)
       let reset = BatFloat.max (!rate_limit_reset -. Unix.time ()) 1. in
-      Lwt_io.printlf "--> Rate limit hit. Retrying in %.1f second(s)..." reset
+      Lwt_io.printlf "--> Rate limit hit. Retrying in %.0f second(s)..." reset
         >>= fun () ->
       Lwt_unix.sleep reset >>= fun () ->
       call path ~params ()

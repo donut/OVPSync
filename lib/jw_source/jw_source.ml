@@ -43,7 +43,7 @@ struct
 
   type videos_video = Jw_client.Platform.videos_list_video
   type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
-  type t = videos_video * string * string
+  type t = videos_video * string option * string option
 
 
   let changed_video_key media_id = "video-changed-" ^ media_id
@@ -68,7 +68,8 @@ struct
     let params = Jw_client.Util.merge_params
       Conf.params
       [ "result_offset", [offset |> string_of_int]
-      ; "statuses_filter", ["ready"] ]
+      ; "statuses_filter", ["ready"] 
+      ; "order_by", ["date:desc"] ]
     in
     let%lwt { videos } = Client.videos_list ~params () in
     Lwt.return videos
@@ -293,11 +294,18 @@ struct
         Log.infof "Checking video [%s] %s" vid.key vid.title >>= fun () ->
         videos_to_check := tl;
 
-        should_sync (vid, "", "") >>= function
-        | false ->
+        let%lwt sync_needed = should_sync (vid, None, None) in
+        match sync_needed, vid.status, vid.sourcetype with
+        | false, _, _ ->
           Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
           next ()
-        | true ->
+        | true, (`Created | `Processing | `Updating | `Failed), `File
+        | true, _, `URL ->
+          Log.infof "[%s] has URL source or non-ready status. RETURNING!"
+            vid.key >>= fun () ->
+          let thumb = original_thumb_url vid.key in
+          Lwt.return (Some (vid, vid.sourceurl, Some thumb))
+        | true, `Ready, `File ->
           Log.infof "[%s] Getting publish and passthrough status." vid.key
             >>= fun () ->
 
@@ -308,7 +316,7 @@ struct
             (* @todo Run persistent storage cleanup if [to_check] and 
               * [processing] are empty *)
             let thumb = original_thumb_url vid.key in
-            Lwt.return (Some (vid, p.file, thumb))
+            Lwt.return (Some (vid, Some p.file, Some thumb))
 
           | published, passthrough ->
             let%lwt prev_changes = get_changed vid.key in

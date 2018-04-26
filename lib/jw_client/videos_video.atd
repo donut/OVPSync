@@ -41,6 +41,7 @@ type t = {
   custom: (string * string) list <json repr="object">;
 
   sourcetype: sourcetype;
+  ?sourceurl: string option;
   mediatype: mediatype;
   ?sourceformat: sourceformat option;
   size: int;
