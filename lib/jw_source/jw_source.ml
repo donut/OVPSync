@@ -68,8 +68,7 @@ struct
     let params = Jw_client.Util.merge_params
       Conf.params
       [ "result_offset", [offset |> string_of_int]
-      ; "statuses_filter", ["ready"] 
-      ; "order_by", ["date:desc"] ]
+      ; "statuses_filter", ["ready"] ]
     in
     let%lwt { videos } = Client.videos_list ~params () in
     Lwt.return videos
@@ -206,9 +205,66 @@ struct
     Lwt.return (vids, to_check)
 
 
-  let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
-    (* 0: Check if video has been updated since last synced to dest *)
-    (* 1: Check if video is published and has passthrough *)
+  let prepare_video_for_sync (vid : videos_video) ~published ~passthrough =
+    let%lwt prev_changes = get_changed vid.key in
+    let now = Unix.time () |> int_of_float in
+
+    begin match published, vid.expires_date with
+    | true, _ -> Lwt.return prev_changes
+    | false, None ->
+      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
+      Lwt.return prev_changes
+    | false, Some e when e > now ->
+      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
+      Lwt.return prev_changes
+    | false, Some _ ->
+      Log.infof "[%s] Not published; publishing..." vid.key
+        >>= fun () ->
+      let changes =
+        { prev_changes with expires = vid.expires_date } in
+      set_changed vid.key changes >>= fun () ->
+      publish_video vid >>= fun () ->
+      Lwt.return changes
+    end >>= fun changes ->
+
+    begin match passthrough with
+    | Some _ -> Lwt.return ()
+    | None ->
+      begin if changes.passthrough then
+        let%lwt { conversions }
+          = Client.videos_conversions_list vid.key
+        in
+        let passthrough = conversions
+          |> List.find_opt (fun (c : videos_conversion) ->
+            String.lowercase_ascii c.template.name = "passthrough")
+        in
+        match passthrough with
+        | None -> Lwt.return true
+        | Some { status = `Failed; key = k } ->
+          Log.errorf "[%s] Passthrough conversion creation failed"  
+            vid.key >>= fun () ->
+          Client.videos_conversions_delete k >>= fun () ->
+          Lwt.return true
+        | _ ->
+          Lwt.return false
+      else
+        Lwt.return true
+        end >>= fun needs_passthrough ->
+
+        if needs_passthrough then
+          Log.infof "[%s] No passthrough; creating..." vid.key
+            >>= fun () ->
+          let changes' = { changes with passthrough = true } in
+          set_changed vid.key changes' >>= fun () ->
+          Client.create_conversion_by_name vid.key "passthrough"
+        else
+          Log.infof "[%s] Waiting on passthrough." vid.key
+      end
+
+
+let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
+  (* 0: Check if video has been updated since last synced to dest *)
+  (* 1: Check if video is published and has passthrough *)
     (* 2: If not, add to runtime and permanent list for revisiting and clean up
           later and make API calls to publish and/or add passthrough. *)
     (* 3: Loop through current set all have been passed on to dest. *)
@@ -319,68 +375,32 @@ struct
             Lwt.return (Some (vid, Some p.file, Some thumb))
 
           | published, passthrough ->
-            let%lwt prev_changes = get_changed vid.key in
-            let now = Unix.time () |> int_of_float in
-
-            begin match published, vid.expires_date with
-            | true, _ -> Lwt.return prev_changes
-            | false, None ->
-              Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
-              Lwt.return prev_changes
-            | false, Some e when e > now ->
-              Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
-              Lwt.return prev_changes
-            | false, Some _ ->
-              Log.infof "[%s] Not published; publishing..." vid.key
+            match%lwt prepare_video_for_sync vid ~published ~passthrough with
+            | exception Not_found -> 
+              Log.infof "[%s] Looks like this video no longer exists. NEXT!"
+                vid.key >>= fun () ->
+              next ()
+            | () ->
+              Log.infof "[%s] Adding to processing list. NEXT!" vid.key
                 >>= fun () ->
-              let changes =
-                { prev_changes with expires = vid.expires_date } in
-              set_changed vid.key changes >>= fun () ->
-              publish_video vid >>= fun () ->
-              Lwt.return changes
-            end >>= fun changes ->
+              processing_videos := vid :: !processing_videos;
+              next ()
 
-            begin match passthrough with
-            | Some _ -> Lwt.return ()
-            | None ->
-              begin if changes.passthrough then
-                let%lwt { conversions }
-                  = Client.videos_conversions_list vid.key
-                in
-                let passthrough = conversions
-                  |> List.find_opt (fun (c : videos_conversion) ->
-                    String.lowercase_ascii c.template.name = "passthrough")
-                in
-                match passthrough with
-                | None -> Lwt.return true
-                | Some { status = `Failed; key = k } ->
-                  Log.errorf "[%s] Passthrough conversion creation failed"  
-                    vid.key >>= fun () ->
-                  Client.videos_conversions_delete k >>= fun () ->
-                  Lwt.return true
-                | _ ->
-                  Lwt.return false
-              else
-                Lwt.return true
-              end >>= fun needs_passthrough ->
-
-              if needs_passthrough then
-                Log.infof "[%s] No passthrough; creating..." vid.key
-                  >>= fun () ->
-                let changes' = { changes with passthrough = true } in
-                set_changed vid.key changes' >>= fun () ->
-                Client.create_conversion_by_name vid.key "passthrough"
-              else
-                Log.infof "[%s] Waiting on passthrough." vid.key
-            end >>= fun () ->
-
-            Log.infof "[%s] Adding to processing list. NEXT!" vid.key
-              >>= fun () ->
-            processing_videos := vid :: !processing_videos;
-            next ()
     in
 
-    Lwt_stream.from next
-
+    Lwt_stream.from begin fun () ->
+      try%lwt next () with
+      | Jw_client.Util.Unexpected_response_status (status, headers, body) ->
+        Log.fatalf
+          "Unexpected HTTP response\n\
+           --> Status: %s\n\n\
+           --> Headers <--\n%s\n\n\
+           --> Body <--\n%s\n"
+          status headers body >>= fun () ->
+        Lwt.return None
+      | exn ->
+        Log.fatalf ~exn "Unexpected error" >>= fun () ->
+        Lwt.return None
+    end
 
 end
