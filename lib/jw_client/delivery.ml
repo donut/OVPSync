@@ -16,13 +16,10 @@ let get path ?(params=[]) () =
   let query = Uri.encoded_of_query params in
   let uri = [ api_prefix_url; path; "?"; query; ] |> String.concat ""
             |> Uri.of_string in
-  Lwt_io.printlf "[GET %s]" (Uri.to_string uri) >>= fun () ->
   Clu.Client.get uri >>= fun (resp, body) ->
 
-  let code = resp |> C.Response.status |> C.Code.code_of_status in
-  Lwt_io.printf "Response code: %d\n" code >>= fun () ->
-  (* let headers = (resp |> C.Response.headers |> C.Header.to_string) in
-  Lwt_io.printf "Headers: %s\n" headers >>= fun () -> *)
+  let status = resp |> C.Response.status |> C.Code.string_of_status in
+  Lwt_io.printlf "[GOT %s]\n--> %s" (Uri.to_string uri) status >>= fun () ->
 
   Lwt.return (resp, body)
 

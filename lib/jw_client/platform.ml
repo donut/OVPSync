@@ -81,12 +81,12 @@ module Make (Conf : Config) : Client = struct
     let uri_str = [ api_prefix_url; path; "?"; query; ] |> String.concat "" in
     let uri = Uri.of_string uri_str in
 
-    Lwt_io.printlf "[GET %s]" uri_str >>= fun () ->
     Clu.Client.get uri >>= fun (resp, body) ->
 
     let status = resp |> C.Response.status in
     let status_str = status |> C.Code.string_of_status in
-    Lwt_io.printlf "--> Response status: %s" status_str >>= fun () ->
+    Lwt_io.printlf "[GOT %s]\n--> %s" uri_str status_str
+      >>= fun () ->
 
     match status with
     | `Too_many_requests ->
