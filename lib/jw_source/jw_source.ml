@@ -306,13 +306,17 @@ struct
 
           | published, passthrough ->
             let%lwt prev_changes = get_changed vid.key in
+            let now = Unix.time () |> int_of_float in
 
-            begin match published, prev_changes.expires with
+            begin match published, vid.expires_date with
             | true, _ -> Lwt.return prev_changes
-            | false, Some _ ->
+            | false, None ->
               Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
               Lwt.return prev_changes
-            | false, None ->
+            | false, Some e when e > now ->
+              Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
+              Lwt.return prev_changes
+            | false, Some _ ->
               Log.infof "[%s] Not published; publishing..." vid.key
                 >>= fun () ->
               let changes =
