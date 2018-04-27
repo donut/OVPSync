@@ -262,144 +262,135 @@ struct
 
 
 let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
-  (* 0: Check if video has been updated since last synced to dest *)
-  (* 1: Check if video is published and has passthrough *)
-    (* 2: If not, add to runtime and permanent list for revisiting and clean up
-          later and make API calls to publish and/or add passthrough. *)
-    (* 3: Loop through current set all have been passed on to dest. *)
-    (* 4: Clean up those confirmed synced to destination, via 
-          [cleanup t -> unit Lwt.t] *)
-    (* 6: At the end of each set, check permanent list to clean up any times
-          not in current list. *)
-    (* 7: Move to next set. *)
-    let current_videos_set = ref [] in
-    let videos_to_check = ref [] in
-    let processing_videos = ref [] in
+  let current_videos_set = ref [] in
+  let videos_to_check = ref [] in
+  let processing_videos = ref [] in
 
-    let rec next () =
-      begin match !videos_to_check, !processing_videos with
-      | [], [] ->
-        (* Check for new videos at the current offset in case more were 
-         * added (or some removed, pushing more into the current offset) in 
-         * the time it took to process the current set *)
-        let%lwt refreshed = match !current_videos_set with
-        | [] -> Lwt.return ([], [])
-        | returned -> refresh_current_videos_set ~returned
-        in
-        begin match refreshed with
-        | _, [] ->
-          Log.info "Getting next set..." >>= fun () ->
-          let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
-          let new_offset =
-            (offset |> int_of_string) + (List.length !current_videos_set) in
-          Var_store.set "request_offset" (new_offset |> string_of_int)
-            >>= fun () ->
-          Log.infof "--> offset: %d" new_offset >>= fun () ->
+  let rec next () =
+    begin match !videos_to_check, !processing_videos with
+    | [], [] ->
+      (* Check for new videos at the current offset in case more were 
+        * added (or some removed, pushing more into the current offset) in 
+        * the time it took to process the current set *)
+      let%lwt refreshed = match !current_videos_set with
+      | [] -> Lwt.return ([], []) 
+      | returned -> refresh_current_videos_set ~returned
+      in
 
-          let%lwt vids = get_set new_offset in
-
-          current_videos_set := vids;
-          videos_to_check := vids;
-          Log.info "--> done!" >>= fun () ->
-
-          Log.info "Cleaning up old changes..." >>= fun () ->
-          let exclude = !videos_to_check
-            |> List.map (fun (v : videos_video) -> v.key)
-          in
-          cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
-
-        | refreshed_set, refreshed_to_check ->
-          Log.info "Returned all vidoes in current set, but more were added at the current offset during that time. Processing those..." 
-            >>= fun () ->
-          current_videos_set := refreshed_set;
-          videos_to_check := refreshed_to_check;
-          Lwt.return ()
-        end
-
-      | [], _ -> 
-        Log.info "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again..."
+      begin match refreshed with
+      | _, [] ->
+        Log.info "Getting next set..." >>= fun () ->
+        let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
+        let new_offset =
+          (offset |> int_of_string) + (List.length !current_videos_set) in
+        Var_store.set "request_offset" (new_offset |> string_of_int)
           >>= fun () ->
-        (* Be sure we grab any updates that happened outside this program 
-         * during the last pass. *)
-        let returned_videos = !current_videos_set
-          |> List.filter (fun (c : videos_video) ->
-            BatOption.is_none @@ List.find_opt
-              (fun (p : videos_video) -> p.key = c.key) !processing_videos)
-        in
-        let%lwt (refreshed_set, refreshed_to_check) =
-          refresh_current_videos_set ~returned:returned_videos 
-        in
+        Log.infof "--> offset: %d" new_offset >>= fun () ->
 
+        let%lwt vids = get_set new_offset in
+
+        current_videos_set := vids;
+        videos_to_check := vids;
+        Log.info "--> done!" >>= fun () ->
+
+        Log.info "Cleaning up old changes..." >>= fun () ->
+        let exclude = !videos_to_check
+          |> List.map (fun (v : videos_video) -> v.key)
+        in
+        cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
+
+      | refreshed_set, refreshed_to_check ->
+        Log.info "Returned all vidoes in current set, but more were added at the current offset during that time. Processing those..." 
+          >>= fun () ->
         current_videos_set := refreshed_set;
         videos_to_check := refreshed_to_check;
-        processing_videos := [];
+        Lwt.return ()
+      end
 
-        sleep_if_few_left !videos_to_check 
+    | [], _ -> 
+      Log.info "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again..."
+        >>= fun () ->
+      (* Be sure we grab any updates that happened outside this program 
+        * during the last pass. *)
+      let returned_videos = !current_videos_set
+        |> List.filter (fun (c : videos_video) ->
+          BatOption.is_none @@ List.find_opt
+            (fun (p : videos_video) -> p.key = c.key) !processing_videos)
+      in
+      let%lwt (refreshed_set, refreshed_to_check) =
+        refresh_current_videos_set ~returned:returned_videos 
+      in
 
-      | _, _
-        -> Lwt.return ()
-      end >>= fun () ->
+      current_videos_set := refreshed_set;
+      videos_to_check := refreshed_to_check;
+      processing_videos := [];
 
-      match !videos_to_check with
-      | [] -> 
-        Log.info "Reached the end of all videos." >>= fun () ->
-        Lwt.return None
+      sleep_if_few_left !videos_to_check 
 
-      | vid :: tl ->
-        Log.infof "Checking video [%s] %s" vid.key vid.title >>= fun () ->
-        videos_to_check := tl;
+    | _, _
+      -> Lwt.return ()
+    end >>= fun () ->
 
-        let%lwt sync_needed = should_sync (vid, None, None) in
-        match sync_needed, vid.status, vid.sourcetype with
-        | false, _, _ ->
-          Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
-          next ()
-        | true, (`Created | `Processing | `Updating | `Failed), `File
-        | true, _, `URL ->
-          Log.infof "[%s] has URL source or non-ready status. RETURNING!"
+    match !videos_to_check with
+    | [] -> 
+      Log.info "Reached the end of all videos." >>= fun () ->
+      Lwt.return None
+
+    | vid :: tl ->
+      Log.infof "Checking video [%s] %s" vid.key vid.title >>= fun () ->
+      videos_to_check := tl;
+
+      let%lwt sync_needed = should_sync (vid, None, None) in
+      match sync_needed, vid.status, vid.sourcetype with
+      | false, _, _ ->
+        Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
+        next ()
+      | true, (`Created | `Processing | `Updating | `Failed), `File
+      | true, _, `URL ->
+        Log.infof "[%s] has URL source or non-ready status. RETURNING!"
+          vid.key >>= fun () ->
+        let thumb = original_thumb_url vid.key in
+        Lwt.return (Some (vid, vid.sourceurl, Some thumb))
+      | true, `Ready, `File ->
+        Log.infof "[%s] Getting publish and passthrough status." vid.key
+          >>= fun () ->
+
+        match%lwt get_status_and_passthrough vid.key with
+        | true, Some p ->
+          Log.infof "[%s] Video is published and has passthrough. RETURNING!"
             vid.key >>= fun () ->
+          (* @todo Run persistent storage cleanup if [to_check] and 
+            * [processing] are empty *)
           let thumb = original_thumb_url vid.key in
-          Lwt.return (Some (vid, vid.sourceurl, Some thumb))
-        | true, `Ready, `File ->
-          Log.infof "[%s] Getting publish and passthrough status." vid.key
-            >>= fun () ->
+          Lwt.return (Some (vid, Some p.file, Some thumb))
 
-          match%lwt get_status_and_passthrough vid.key with
-          | true, Some p ->
-            Log.infof "[%s] Video is published and has passthrough. RETURNING!"
+        | published, passthrough ->
+          match%lwt prepare_video_for_sync vid ~published ~passthrough with
+          | exception Not_found -> 
+            Log.infof "[%s] Looks like this video no longer exists. NEXT!"
               vid.key >>= fun () ->
-            (* @todo Run persistent storage cleanup if [to_check] and 
-              * [processing] are empty *)
-            let thumb = original_thumb_url vid.key in
-            Lwt.return (Some (vid, Some p.file, Some thumb))
+            next ()
+          | () ->
+            Log.infof "[%s] Adding to processing list. NEXT!" vid.key
+              >>= fun () ->
+            processing_videos := vid :: !processing_videos;
+            next ()
 
-          | published, passthrough ->
-            match%lwt prepare_video_for_sync vid ~published ~passthrough with
-            | exception Not_found -> 
-              Log.infof "[%s] Looks like this video no longer exists. NEXT!"
-                vid.key >>= fun () ->
-              next ()
-            | () ->
-              Log.infof "[%s] Adding to processing list. NEXT!" vid.key
-                >>= fun () ->
-              processing_videos := vid :: !processing_videos;
-              next ()
+  in
 
-    in
-
-    Lwt_stream.from begin fun () ->
-      try%lwt next () with
-      | Jw_client.Util.Unexpected_response_status (status, headers, body) ->
-        Log.fatalf
-          "Unexpected HTTP response\n\
-           --> Status: %s\n\n\
-           --> Headers <--\n%s\n\n\
-           --> Body <--\n%s\n"
-          status headers body >>= fun () ->
-        Lwt.return None
-      | exn ->
-        Log.fatalf ~exn "Unexpected error" >>= fun () ->
-        Lwt.return None
-    end
+  Lwt_stream.from begin fun () ->
+    try%lwt next () with
+    | Jw_client.Util.Unexpected_response_status (status, headers, body) ->
+      Log.fatalf
+        "Unexpected HTTP response\n\
+          --> Status: %s\n\n\
+          --> Headers <--\n%s\n\n\
+          --> Body <--\n%s\n"
+        status headers body >>= fun () ->
+      Lwt.return None
+    | exn ->
+      Log.fatalf ~exn "Unexpected error" >>= fun () ->
+      Lwt.return None
+  end
 
 end
