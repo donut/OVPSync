@@ -41,6 +41,7 @@ module Make (Client : Jw_client.Platform.Client)
             (Conf : Config) =
 struct
 
+  type accounts_template = Jw_client.Platform.accounts_templates_list_template
   type videos_video = Jw_client.Platform.videos_list_video
   type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
   type t = videos_video * string option * string option
@@ -120,6 +121,96 @@ struct
     Client.videos_update vid.key params
 
 
+
+  let refresh_current_videos_set ~returned =
+    let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
+    let%lwt vids = get_set (offset |> int_of_string) in
+    let to_check = vids 
+      |> List.filter (fun (v : videos_video) ->
+        BatOption.is_none @@ List.find_opt
+          (fun (r : videos_video) -> r.key = v.key) returned)
+    in
+
+    Lwt.return (vids, to_check)
+
+
+  (* Cache the passthrough template key. This will save nearly 1 API request
+   * per video processed. *)
+  let passthrough_template_key = ref None
+
+  let add_passthroug_conversion media_id =
+    begin match !passthrough_template_key with
+    | Some k -> Lwt.return k
+    | None ->
+      let%lwt body = Client.accounts_templates_list () in
+      let template = body.templates |> List.find (fun (t : accounts_template) ->
+        String.lowercase_ascii t.name = "passthrough"
+      ) in
+      passthrough_template_key := Some template.key;
+      Lwt.return template.key
+    end >>= fun key ->
+
+    Client.videos_conversions_create media_id key
+
+  let prepare_video_for_sync (vid : videos_video) ~published ~passthrough =
+    let%lwt prev_changes = get_changed vid.key in
+    let now = Unix.time () |> int_of_float in
+
+    begin match published, vid.expires_date with
+    | true, _ -> Lwt.return prev_changes
+    | false, None ->
+      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
+      Lwt.return prev_changes
+    | false, Some e when e > now ->
+      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
+      Lwt.return prev_changes
+    | false, Some _ ->
+      Log.infof "[%s] Not published; publishing..." vid.key
+        >>= fun () ->
+      let changes =
+        { prev_changes with expires = vid.expires_date } in
+      set_changed vid.key changes >>= fun () ->
+      publish_video vid >>= fun () ->
+      Lwt.return changes
+    end >>= fun changes ->
+
+    begin match passthrough with
+    | Some _ -> Lwt.return ()
+    | None ->
+      begin if changes.passthrough then
+        let%lwt { conversions }
+          = Client.videos_conversions_list vid.key
+        in
+        let passthrough = conversions
+          |> List.find_opt (fun (c : videos_conversion) ->
+            String.lowercase_ascii c.template.name = "passthrough")
+        in
+        match passthrough with
+        | None -> Lwt.return true
+        | Some { status = `Failed; key } ->
+          (* @todo Deal with passthrough conversions that fail every time.
+           *       This has the potential to infinitely loop. *)
+          Log.errorf "[%s] Passthrough conversion creation failed"  
+            vid.key >>= fun () ->
+          Client.videos_conversions_delete key >>= fun () ->
+          Lwt.return true
+        | _ ->
+          Lwt.return false
+      else
+        Lwt.return true
+      end >>= fun needs_passthrough ->
+
+      if needs_passthrough then
+        Log.infof "[%s] No passthrough; creating..." vid.key
+          >>= fun () ->
+        let changes' = { changes with passthrough = true } in
+        set_changed vid.key changes' >>= fun () ->
+        add_passthroug_conversion vid.key
+      else
+        Log.infof "[%s] Waiting on passthrough." vid.key
+    end
+
+
   let cleanup_by_media_id media_id ?changed () =
     Log.infof "Undoing changes to [%s]" media_id >>= fun () ->
     let%lwt { expires; passthrough } = match changed with 
@@ -190,78 +281,6 @@ struct
         (now - timestamp) > min_age)
     |> Lwt_list.iter_p (fun (media_id, changed) ->
       cleanup_by_media_id media_id ~changed ())
-
-
-  let refresh_current_videos_set ~returned =
-    let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
-    let%lwt vids = get_set (offset |> int_of_string) in
-    let to_check = vids 
-      |> List.filter (fun (v : videos_video) ->
-        BatOption.is_none @@ List.find_opt
-          (fun (r : videos_video) -> r.key = v.key) returned)
-    in
-
-    Lwt.return (vids, to_check)
-
-
-  let prepare_video_for_sync (vid : videos_video) ~published ~passthrough =
-    let%lwt prev_changes = get_changed vid.key in
-    let now = Unix.time () |> int_of_float in
-
-    begin match published, vid.expires_date with
-    | true, _ -> Lwt.return prev_changes
-    | false, None ->
-      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
-      Lwt.return prev_changes
-    | false, Some e when e > now ->
-      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
-      Lwt.return prev_changes
-    | false, Some _ ->
-      Log.infof "[%s] Not published; publishing..." vid.key
-        >>= fun () ->
-      let changes =
-        { prev_changes with expires = vid.expires_date } in
-      set_changed vid.key changes >>= fun () ->
-      publish_video vid >>= fun () ->
-      Lwt.return changes
-    end >>= fun changes ->
-
-    begin match passthrough with
-    | Some _ -> Lwt.return ()
-    | None ->
-      begin if changes.passthrough then
-        let%lwt { conversions }
-          = Client.videos_conversions_list vid.key
-        in
-        let passthrough = conversions
-          |> List.find_opt (fun (c : videos_conversion) ->
-            String.lowercase_ascii c.template.name = "passthrough")
-        in
-        match passthrough with
-        | None -> Lwt.return true
-        | Some { status = `Failed; key } ->
-          (* @todo Deal with passthrough conversions that fail every time.
-           *       This has the potential to infinitely loop. *)
-          Log.errorf "[%s] Passthrough conversion creation failed"  
-            vid.key >>= fun () ->
-          Client.videos_conversions_delete key >>= fun () ->
-          Lwt.return true
-        | _ ->
-          Lwt.return false
-      else
-        Lwt.return true
-      end >>= fun needs_passthrough ->
-
-      if needs_passthrough then
-        Log.infof "[%s] No passthrough; creating..." vid.key
-          >>= fun () ->
-        let changes' = { changes with passthrough = true } in
-        set_changed vid.key changes' >>= fun () ->
-        Client.create_conversion_by_name vid.key "passthrough"
-      else
-        Log.infof "[%s] Waiting on passthrough." vid.key
-    end
-
 
 (* [make_stream should_sync] streams [t] until it has run through all of them. 
  * Note that it remembers the last offset and continues from there assuming
