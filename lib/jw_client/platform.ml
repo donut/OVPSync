@@ -111,8 +111,8 @@ module Make (Conf : Config) : Client = struct
       |> BatOption.map_default int_of_string_opt None
       |> BatOption.default 0;
 
-    Lwt_io.printlf "%d API hits remaining; Rate limit reset at %.0f;"
-      !rate_limit_remaining !rate_limit_reset >>= fun () ->
+    Lwt_io.printlf "%d API hits remaining; Rate limit resets in %.0f seconds"
+      !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
 
     match status with
     | `Too_many_requests ->
