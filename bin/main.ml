@@ -34,7 +34,7 @@ let main () =
   end) in
 
   let module JW_src = Jw_source.Make(JW)(JW_var_store)(Log_jw)(struct
-    let params = ["result_limit", ["10"]] 
+    let params = ["result_limit", ["1000"]] 
     let temp_pub_tag = "Temporarily Published"
     let backup_expires_field = "ovp_sync.backup_expires_date"
   end) in
@@ -60,8 +60,7 @@ let main () =
     let should_sync _ = Lwt.return true
   end) in
 
-  Lwt_io.printl "test" >>=
-  Synker.sync
+  Synker.sync ()
 
 let () = 
   Random.self_init ();
