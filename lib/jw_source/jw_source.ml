@@ -67,8 +67,7 @@ struct
   let get_set offset =
     let params = Jw_client.Util.merge_params
       Conf.params
-      [ "result_offset", [offset |> string_of_int]
-      ; "statuses_filter", ["ready"] ]
+      [ "result_offset", [offset |> string_of_int] ]
     in
     let%lwt { videos } = Client.videos_list ~params () in
     Lwt.return videos
