@@ -239,28 +239,47 @@ struct
         in
         match passthrough with
         | None -> Lwt.return true
-        | Some { status = `Failed; key = k } ->
+        | Some { status = `Failed; key } ->
+          (* @todo Deal with passthrough conversions that fail every time.
+           *       This has the potential to infinitely loop. *)
           Log.errorf "[%s] Passthrough conversion creation failed"  
             vid.key >>= fun () ->
-          Client.videos_conversions_delete k >>= fun () ->
+          Client.videos_conversions_delete key >>= fun () ->
           Lwt.return true
         | _ ->
           Lwt.return false
       else
         Lwt.return true
-        end >>= fun needs_passthrough ->
+      end >>= fun needs_passthrough ->
 
-        if needs_passthrough then
-          Log.infof "[%s] No passthrough; creating..." vid.key
-            >>= fun () ->
-          let changes' = { changes with passthrough = true } in
-          set_changed vid.key changes' >>= fun () ->
-          Client.create_conversion_by_name vid.key "passthrough"
-        else
-          Log.infof "[%s] Waiting on passthrough." vid.key
-      end
+      if needs_passthrough then
+        Log.infof "[%s] No passthrough; creating..." vid.key
+          >>= fun () ->
+        let changes' = { changes with passthrough = true } in
+        set_changed vid.key changes' >>= fun () ->
+        Client.create_conversion_by_name vid.key "passthrough"
+      else
+        Log.infof "[%s] Waiting on passthrough." vid.key
+    end
 
 
+(* [make_stream should_sync] streams [t] until it has run through all of them. 
+ * Note that it remembers the last offset and continues from there assuming
+ * the [Variable_store] passed to [Make] is persistent.
+ * 
+ * JW does three things that complicate this process:
+ *
+ *   1) Original media files are unavailable by default, requiring a 
+ *      "passthrough" conversion to be added, which is not an instant process.
+ *      @see http://qa.jwplayer.com/~abussey/demos/general/access-originals.html
+ * 
+ *   2) The passthrough conversion counts against space usage.
+ *
+ *   3) Conversions of unpublished ("expired") media are inaccessible. 
+ *
+ * This means we need to prepare most media before returning it and then undo
+ * any changes that we made. 
+ *)
 let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
   let current_videos_set = ref [] in
   let videos_to_check = ref [] in
@@ -273,7 +292,10 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
         * added (or some removed, pushing more into the current offset) in 
         * the time it took to process the current set *)
       let%lwt refreshed = match !current_videos_set with
+      (* First set, no need to refresh *)
       | [] -> Lwt.return ([], []) 
+      (* Since [videos_to_check] and [processing_videos] are empty, we can
+       * assume that all videos in [current_videos_set] have been returned. *)
       | returned -> refresh_current_videos_set ~returned
       in
 
@@ -312,13 +334,13 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
         >>= fun () ->
       (* Be sure we grab any updates that happened outside this program 
         * during the last pass. *)
-      let returned_videos = !current_videos_set
+      let returned = !current_videos_set
         |> List.filter (fun (c : videos_video) ->
           BatOption.is_none @@ List.find_opt
             (fun (p : videos_video) -> p.key = c.key) !processing_videos)
       in
       let%lwt (refreshed_set, refreshed_to_check) =
-        refresh_current_videos_set ~returned:returned_videos 
+        refresh_current_videos_set ~returned
       in
 
       current_videos_set := refreshed_set;
@@ -338,7 +360,7 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
       Lwt.return None
 
     | vid :: tl ->
-      Log.infof "Checking video [%s] %s" vid.key vid.title >>= fun () ->
+      Log.infof "Checking video [%s: %s]" vid.key vid.title >>= fun () ->
       videos_to_check := tl;
 
       let%lwt sync_needed = should_sync (vid, None, None) in
@@ -346,12 +368,17 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
       | false, _, _ ->
         Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
         next ()
+
       | true, (`Created | `Processing | `Updating | `Failed), `File
       | true, _, `URL ->
         Log.infof "[%s] has URL source or non-ready status. RETURNING!"
           vid.key >>= fun () ->
+        (* Since this program is designed to be run over and over again, 
+         * constantly syncing media from JW, we can catch anything that's
+         * processing the next time we reach this offset. *)
         let thumb = original_thumb_url vid.key in
         Lwt.return (Some (vid, vid.sourceurl, Some thumb))
+
       | true, `Ready, `File ->
         Log.infof "[%s] Getting publish and passthrough status." vid.key
           >>= fun () ->
@@ -375,6 +402,9 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
             Log.infof "[%s] Adding to processing list. NEXT!" vid.key
               >>= fun () ->
             processing_videos := vid :: !processing_videos;
+            (* This video isn't ready to be returned yet, take at the next
+             * video in the list. This video will get looked at again once
+             * we've gone through every video in the current list to check. *)
             next ()
 
   in
