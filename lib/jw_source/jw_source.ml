@@ -334,6 +334,7 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
     match !videos_to_check with
     | [] -> 
       Log.info "Reached the end of all videos." >>= fun () ->
+      Var_store.delete "request_offset" >>= fun () ->
       Lwt.return None
 
     | vid :: tl ->
