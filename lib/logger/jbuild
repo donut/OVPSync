@@ -3,4 +3,4 @@
 (library
   ((name logger)
    (libraries (sync
-               batteries lwt))))
+               batteries lwt lwt.unix))))
