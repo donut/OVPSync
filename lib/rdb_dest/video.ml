@@ -1,13 +1,4 @@
 
-
-type source = {
-  name: string;
-  id: string;
-  created: int;
-  updated: int;
-  custom: (string * string) list;
-}
-
 type t = {
   id: int option;
 
@@ -21,19 +12,19 @@ type t = {
 
   file_uri: Uri.t;
   filename: string;
-  md5: string;
-  width: int;
-  height: int;
-  duration: int;
+  md5: string option;
+  width: int option;
+  height: int option;
+  duration: int option;
   
   thumbnail_uri: Uri.t;
-  description: string;
+  description: string option;
   tags: string list;
   custom: (string * string) list;
 
   cms_id: string option;
   link: Uri.t option;
 
-  canonical: source;
-  sources: source list;
-}
+  canonical: Source.t;
+  sources: Source.t list;
+} [@@deriving fields]

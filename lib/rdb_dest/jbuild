@@ -2,4 +2,6 @@
 
 (library
   ((name rdb_dest)
-   (libraries (batteries caqti caqti-dynload caqti-lwt lwt uri))))
+   (libraries (sync
+               batteries caqti caqti-dynload caqti-lwt lwt uri))
+  ))

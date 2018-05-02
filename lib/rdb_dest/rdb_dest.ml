@@ -1,6 +1,7 @@
 
 module Client = Client
 module Video = Video
+module Source = Source
 
 open Lwt.Infix
 
@@ -10,7 +11,7 @@ module type Config = sig
 end
 
 
-module Make (Conf : Config) = struct
+module Make (Log : Sync.Logger) (Conf : Config) = struct
   open Conf
 
   type t = Video.t
