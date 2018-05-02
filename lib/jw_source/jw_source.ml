@@ -44,7 +44,7 @@ struct
   type accounts_template = Jw_client.Platform.accounts_templates_list_template
   type videos_video = Jw_client.Platform.videos_list_video
   type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
-  type t = videos_video * string option * string option
+  type t = videos_video * (string * int option * int option) option * string option
 
 
   let changed_video_key media_id = "video-changed-" ^ media_id
@@ -395,21 +395,22 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
         (* Since this program is designed to be run over and over again, 
          * constantly syncing media from JW, we can catch anything that's
          * processing the next time we reach this offset. *)
+        let file = BatOption.map (fun s -> (s, None, None)) vid.sourceurl in
         let thumb = original_thumb_url vid.key in
-        Lwt.return (Some (vid, vid.sourceurl, Some thumb))
+        Lwt.return (Some (vid, file, Some thumb))
 
       | true, `Ready, `File ->
         Log.infof "[%s] Getting publish and passthrough status." vid.key
           >>= fun () ->
 
         match%lwt get_status_and_passthrough vid.key with
-        | true, Some p ->
+        | true, Some { file; width; height } ->
           Log.infof "[%s] Video is published and has passthrough. RETURNING!"
             vid.key >>= fun () ->
           (* @todo Run persistent storage cleanup if [to_check] and 
             * [processing] are empty *)
           let thumb = original_thumb_url vid.key in
-          Lwt.return (Some (vid, Some p.file, Some thumb))
+          Lwt.return (Some (vid, Some (file, width, height), Some thumb))
 
         | published, passthrough ->
           match%lwt prepare_video_for_sync vid ~published ~passthrough with
