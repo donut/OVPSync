@@ -17,6 +17,10 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
   type t = Video.t
   
   let save t =
+    let canonical = Video.canonical t in
+    let media_id = Source.media_id canonical in
+    Log.infof "Saving [%s]..." media_id >>= fun () ->
+    
     (* 1: Check if a video with one of the same ovp+media exists. *)
     (* 2a: If exists, update *)
     (* 2b: If not, save new video *)

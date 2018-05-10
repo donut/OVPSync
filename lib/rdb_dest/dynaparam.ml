@@ -1,0 +1,9 @@
+
+(* A method for dynamically setting the parameters at run time.
+ * @see https://github.com/paurkedal/ocaml-caqti/issues/15
+ *)
+
+type t = Pack : 'a Caqti_type.t * 'a * string list -> t
+let empty = Pack (Caqti_type.unit, (), [])
+let add t x p (Pack (t', x', pl)) =
+  Pack (Caqti_type.tup2 t' t, (x', x), p :: pl)

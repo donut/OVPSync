@@ -84,7 +84,6 @@ let main () =
         |> BatOption.map ((^) "rightthisminute.com-")
       in
 
-      let now = Unix.time () |> int_of_float in
       let module Vid_j = Jw_client.Videos_video_j in
       let author = match vid.author with
         | None -> []
@@ -116,10 +115,12 @@ let main () =
       in
       let source = 
         { Rdb_dest.Source. 
-          name =  "jw-" ^ Conf.JW_source.key conf
-        ; id = vid.key
-        ; created = now
-        ; updated = now
+          id = None
+        ; name =  "jw-" ^ Conf.JW_source.key conf
+        ; media_id = vid.key
+        ; video_id = None
+        ; added = vid.date
+        ; modified = vid.updated
         ; custom = source_custom }
       in
       
@@ -129,8 +130,8 @@ let main () =
       ; title = vid.title
       ; slug
 
-      ; created = now
-      ; updated = now
+      ; created = vid.date
+      ; updated = vid.updated
       ; publish = vid.date
       ; expires = vid.expires_date
 
