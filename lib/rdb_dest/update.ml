@@ -1,0 +1,136 @@
+
+open Lwt.Infix
+
+module type DBC = Caqti_lwt.CONNECTION
+
+exception Missing_id of string * string
+
+module Q = struct 
+
+  module Creq = Caqti_request
+  open Caqti_type
+
+  let or_insert_source = Creq.exec 
+    (tup4 string string (option int) (tup2 int int))
+    "INSERT INTO source (name, media_id, video_id, added, modified) \
+     VALUES (?, ?, ?, ?, ?) \
+     ON DUPLICATE KEY UPDATE \
+      video_id = VALUES(video_id), \
+      added = VALUES(added), modified = VALUES(modified)"
+
+  let video = Creq.exec
+          (* id title slug publish *)
+    (tup4 (tup3 string string int)
+          (* expires file_uri md5 width *)
+          (tup4 (option int) (option string) (option string) (option int))
+          (* height duration thumbnail_uri description *)
+          (tup4 (option int) (option int) (option string) (option string))
+          (* cms_id link canonical_source_id id *)
+          (tup4 (option string) (option string) int int))
+    "UPDATE video \
+      title = ?, slug = ?, publish = ?, expires = ?, \
+      file_uri = ?, md5 = ?, width = ?, height = ?, \
+      duration = ?, thumbnail_uri = ?, description = ?, cms_id = ?, link = ?, \
+      canonical_source_id = ? \
+     WHERE id = ? LIMIT 1"
+
+end
+
+let or_insert_x_fields (module DB : DBC) x x_id fields =
+  let x_name = match x with `Source -> "source" | `Video -> "video" in
+  let module D = Dynaparam in
+  let (D.Pack (typ, vals, placeholders)) = List.fold_left 
+    (fun pack (name, value) ->
+      D.add Caqti_type.(tup3 int string string)
+            (x_id, name, value) "(?, ?, ?)" pack)
+    D.empty fields in
+  let placeholders = String.concat ", " placeholders in
+  let sql = Printf.sprintf
+    "INSERT INTO %s_field (%s_id, name, value) VALUES %s \
+     ON DUPLICATE KEY UPDATE value = VALUES(value)"
+    x_name x_name placeholders in
+  let query = Caqti_request.exec typ sql in
+  DB.exec query vals >>= Caqti_lwt.or_fail
+
+let or_insert_source_fields (module DB : DBC) src_id fields =
+  or_insert_x_fields (module DB) `Source src_id fields
+
+let or_insert_source (module DB : DBC) src =
+  let values =
+    Source.(name src, media_id src, video_id src, (added src, modified src)) in
+  DB.exec Q.or_insert_source values >>= Caqti_lwt.or_fail >>= fun () ->
+  let%lwt id = match Source.id src with
+  | None -> DB.find Insert.Q.last_insert_id () >>= Caqti_lwt.or_fail
+  | Some id -> Lwt.return id
+  in
+  
+  let fields = Source.custom src in 
+  let field_names = List.map fst fields in
+  Delete.source_fields_not_named (module DB) id field_names >>= fun () ->
+
+  or_insert_source_fields (module DB) id fields >>= fun () ->
+
+  Lwt.return { src with id = Some id }
+
+let sources_of_video (module DB : DBC) vid =
+  let canonical = Video.canonical vid in
+  let is_canonical s =
+    Source.(name s == name canonical && media_id s = media_id canonical) in
+  let sources = Video.sources vid in
+  let sources_include_canonical = List.exists is_canonical sources in
+  let sources =
+    if sources_include_canonical then sources else canonical :: sources
+    |> List.map (fun s -> Source.({ s with video_id = (Video.id vid) })) in
+  (* [or_insert_sources] will add IDs if an INSERT was performed. *)
+  Lwt_list.map_s (or_insert_source (module DB)) sources >>= fun sources ->
+
+  let canonical = List.find is_canonical sources in
+  Lwt.return { vid with canonical; sources }
+
+let or_insert_video_fields (module DB : DBC) vid_id fields =
+  or_insert_x_fields (module DB) `Video vid_id fields
+
+let video (module DB : DBC) vid =
+  let canonical = Video.canonical vid in
+
+  let vid_id = match Video.id vid with
+  | None ->
+    let str_id = Printf.sprintf "ovp:%s media_id:%s"
+      (Source.name canonical) (Source.media_id canonical) in
+    raise @@ Missing_id ("video.id", str_id)
+  | Some id -> id
+  in
+
+  begin if Source.id canonical |> BatOption.is_none then
+    let str_id = Printf.sprintf "vid:%d ovp:%s media_id:%s"
+      vid_id (Source.name canonical) (Source.media_id canonical) in
+    raise @@ Missing_id ("video.canonical.id", str_id)
+  end;
+
+  sources_of_video (module DB) vid >>= fun vid ->
+
+  Insert.new_tags_of (module DB) (Video.tags vid) >>= fun () ->
+
+  let fields = Video.custom vid in
+  let field_names = fields |> List.map fst in
+  Delete.video_fields_not_named (module DB) vid_id field_names >>= fun () ->
+  or_insert_video_fields (module DB) vid_id fields >>= fun () ->
+
+  let canonical_id = BatOption.get @@ Source.id canonical in
+  let some_string_of_uri uri =
+    if uri == Uri.empty then None else Some (Uri.to_string uri)
+  in
+  let file_str = some_string_of_uri @@ Video.file_uri vid in
+  let thumb_str = some_string_of_uri @@ Video.thumbnail_uri vid in
+  let link_str = Video.link vid
+    |> BatOption.map_default some_string_of_uri None
+  in
+  DB.exec Q.video
+    Video.( (title vid, slug vid, publish vid)
+          , (expires vid, file_str, md5 vid, width vid)
+          , (height vid, duration vid, thumb_str, description vid)
+          , (cms_id vid, link_str, canonical_id, vid_id) )
+    >>= Caqti_lwt.or_fail >>= fun () ->
+
+  Lwt.return vid
+

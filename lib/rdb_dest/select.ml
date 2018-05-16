@@ -63,12 +63,15 @@ let source_of_row row ~custom =
   let ((id, name, media_id, video_id), added, modified) = row in
   { Source. id = Some id; name; media_id; video_id; custom; added; modified }
 
+let source_fields (module DB : DBC) source_id =
+  DB.collect_list Q.source_fields source_id >>= Caqti_lwt.or_fail
+
 let source (module DB : DBC) ~name ~media_id =
   DB.find_opt Q.source (name, media_id) >>= Caqti_lwt.or_fail >>= function
   | None -> Lwt.return None
   | Some row ->
     let id = BatTuple.(Tuple3.first row |> Tuple4.first) in
-    let%lwt custom = DB.collect_list Q.source_fields id >>= Caqti_lwt.or_fail in
+    let%lwt custom = source_fields (module DB) id in
     Lwt.return @@ Some (source_of_row row ~custom)
 
 let source_fields_by_video_id (module DB : DBC) video_id =

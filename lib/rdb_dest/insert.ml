@@ -68,22 +68,25 @@ let source (module DB : DBC) src =
   source_fields (module DB) id (Source.custom src) >>= fun () ->
   Lwt.return { src with id = Some id }
 
-let tags (module DB : DBC) lst = 
+let new_tags_of (module DB : DBC) lst = 
   (* Existing names are filtered out to void incrementing the autoincrement
    * counter, as `ON DUPLICATE KEY UPDATE` does. This process is expected to
-   * be run many times with already existing tags, since there is a reliatvely
+   * be run many times with mostly existing tags, since there is a reliatvely
    * small pool of tags but a large number of videos. *)
   let%lwt existing = Select.tags_by_name (module DB) lst in
   let names = lst |> List.filter
     (fun n -> not @@ List.exists (fun (_, n') -> n == n') existing) in
-  let module D = Dynaparam in
-  let (D.Pack (typ, values, placeholders)) = List.fold_left
-    (fun pack tag -> D.add Caqti_type.string tag "(?)" pack) D.empty names in
-  let sql = Printf.sprintf
-    "INSERT INTO tag (name) VALUES %s ON DUPLICATE KEY UPDATE id=id"
-    (String.concat ", " placeholders) in
-  let query = Caqti_request.exec typ sql in
-  DB.exec query values >>= Caqti_lwt.or_fail
+  match List.length names with 
+  | 0 -> Lwt.return ()
+  | _ ->
+    let module D = Dynaparam in
+    let (D.Pack (typ, values, placeholders)) = List.fold_left
+      (fun pack tag -> D.add Caqti_type.string tag "(?)" pack) D.empty names in
+    let sql = Printf.sprintf
+      "INSERT INTO tag (name) VALUES %s ON DUPLICATE KEY UPDATE id=id"
+      (String.concat ", " placeholders) in
+    let query = Caqti_request.exec typ sql in
+    DB.exec query values >>= Caqti_lwt.or_fail
 
 let video_tag_relations (module DB : DBC) video_id tag_ids =
   let module D = Dynaparam in
@@ -157,9 +160,9 @@ let video (module DB : DBC) vid =
   in
   let canonical = List.find match_canonical sources in
   
-  tags (module DB) (Video.tags vid) >>= fun () ->
-  let%lwt tag_list = Select.tags_by_name (module DB) (Video.tags vid) in
-  let tag_ids = List.map fst tag_list in
+  new_tags_of (module DB) (Video.tags vid) >>= fun () ->
+  let%lwt tags = Select.tags_by_name (module DB) (Video.tags vid) in
+  let tag_ids = List.map fst tags in
   video_tag_relations (module DB) vid_id tag_ids >>= fun () ->
   
   video_fields (module DB) vid_id (Video.custom vid) >>= fun () ->
