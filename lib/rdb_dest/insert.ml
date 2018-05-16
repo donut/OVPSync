@@ -134,14 +134,9 @@ let video (module DB : DBC) vid =
   let canonical = sources |> List.find match_canonical in
   
   let canonical_id = BatOption.get @@ Source.id canonical in
-  let some_string_of_uri uri =
-    if uri == Uri.empty then None else Some (Uri.to_string uri)
-  in
-  let file_str = some_string_of_uri @@ Video.file_uri vid in
-  let thumb_str = some_string_of_uri @@ Video.thumbnail_uri vid in
-  let link_str = Video.link vid
-    |> BatOption.map_default some_string_of_uri None
-  in
+  let file_str = Video.file_uri vid |> BatOption.map Uri.to_string in
+  let thumb_str = Video.thumbnail_uri vid |> BatOption.map Uri.to_string in
+  let link_str = Video.link vid |> BatOption.map Uri.to_string in
   DB.exec Q.video
     Video.( (title vid, slug vid, publish vid)
           , (expires vid, file_str, md5 vid, width vid)

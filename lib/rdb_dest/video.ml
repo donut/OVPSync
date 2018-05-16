@@ -10,14 +10,14 @@ type t = {
   publish : int;
   expires : int option;
 
-  file_uri : Uri.t;
+  file_uri : Uri.t option;
   filename : string;
   md5 : string option;
   width : int option;
   height : int option;
   duration : int option;
   
-  thumbnail_uri : Uri.t;
+  thumbnail_uri : Uri.t option;
   description : string option;
   tags : string list;
   custom : (string * string) list;

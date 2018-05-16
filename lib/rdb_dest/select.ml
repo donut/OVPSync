@@ -118,12 +118,11 @@ let video (module DB : DBC) id =
     let (height, duration, thumbnail, description) = third in
     let (cms_id, link', canonical_source_id, (created, updated)) = fourth in
 
-    let file_uri = BatOption.map_default Uri.of_string Uri.empty file in
-    let filename = Uri.path file_uri 
+    let file_uri = BatOption.map Uri.of_string file in
+    let filename = Uri.path (BatOption.default Uri.empty file_uri)
       |> String.split_on_char '/'
       |> BatList.last in
-    let thumbnail_uri =
-      BatOption.map_default Uri.of_string Uri.empty thumbnail in
+    let thumbnail_uri = BatOption.map Uri.of_string thumbnail in
 
     let%lwt tags = DB.collect_list Q.video_tags id >>= Caqti_lwt.or_fail in
     let%lwt custom = DB.collect_list Q.video_fields id

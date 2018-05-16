@@ -62,7 +62,7 @@ let main () =
       | None -> None, None, None 
       | Some (f, w, h) -> Some f, w, h
       in
-      let file_uri = BatOption.map_default Uri.of_string Uri.empty file in
+      let file_uri = BatOption.map Uri.of_string file in
       let filename =
         BatList.assoc_opt "file_name" vid.custom |> BatOption.default slug in
       let duration_ptrn = Re.Perl.compile_pat "^(\\d+)(?:\\.(\\d{2}))?\\d*$" in
@@ -74,7 +74,7 @@ let main () =
         | [| i; d |] -> Some (sprintf "%s%s0" i d |> int_of_string)
         | _ -> None
       in
-      let thumbnail_uri = BatOption.map_default Uri.of_string Uri.empty thumb in
+      let thumbnail_uri = BatOption.map Uri.of_string thumb in
 
       let tags = String.split_on_char ',' vid.tags
         |> List.map String.trim
