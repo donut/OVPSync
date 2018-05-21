@@ -2,7 +2,7 @@
 
 (library
   ((name rdb_dest)
-   (libraries (sync
-               batteries caqti caqti-dynload caqti-lwt lwt uri))
+   (libraries (lib sync
+               batteries caqti caqti-dynload caqti-lwt cohttp.lwt lwt re uri))
    (preprocess (pps (ppx_fields_conv lwt.ppx)))
   ))

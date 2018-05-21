@@ -27,12 +27,24 @@ module Q = struct
           (tup4 (option int) (option int) (option string) (option string))
           (* cms_id link canonical_source_id id *)
           (tup4 (option string) (option string) int int))
-    "UPDATE video \
+    "UPDATE video SET \
       title = ?, slug = ?, publish = ?, expires = ?, \
       file_uri = ?, md5 = ?, width = ?, height = ?, \
       duration = ?, thumbnail_uri = ?, description = ?, cms_id = ?, link = ?, \
       canonical_source_id = ? \
      WHERE id = ? LIMIT 1"
+
+  let video_thumbnail_uri = Creq.exec
+    (tup2 string int)
+    "UPDATE video SET thumbnail_uri = ? WHERE id = ? LIMIT 1"
+
+  let video_file_uri = Creq.exec
+    (tup2 string int)
+    "UPDATE video SET file_uri = ? WHERE id = ? LIMIT 1"
+    
+  let video_md5 = Creq.exec
+    (tup2 string int)
+    "UPDATE video SET md5 = ? WHERE id = ? LIMIT 1"
 
 end
 
@@ -129,3 +141,11 @@ let video (module DB : DBC) vid =
 
   Lwt.return vid
 
+let video_thumbnail_uri (module DB : DBC) vid_id uri =
+  DB.exec Q.video_thumbnail_uri (uri, vid_id) >>= Caqti_lwt.or_fail
+
+let video_file_uri (module DB : DBC) vid_id uri =
+  DB.exec Q.video_file_uri (uri, vid_id) >>= Caqti_lwt.or_fail
+
+let video_md5 (module DB : DBC) vid_id md5 =
+  DB.exec Q.video_md5 (md5, vid_id) >>= Caqti_lwt.or_fail

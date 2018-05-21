@@ -44,6 +44,7 @@ let main () =
 
   let module Dest = Rdb_dest.Make(Log_rdb_dest)(struct
     let db_pool = pool
+    let files_path = "/Users/donut/RTM/OVPSync/data/files"
   end) in
 
   let module Synker = Sync.Make(JW_src)(Dest)(struct
