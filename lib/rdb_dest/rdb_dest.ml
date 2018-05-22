@@ -26,6 +26,54 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
 
   type t = Video.t
 
+  let save_thumb_file (module DB : DBC)
+    ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
+  =
+    let filename = File.restrict_name_length basename ext in
+    let file_path = spf "%s/%s" abs_path filename in
+    (* 7. save thumbnail via streaming *)
+    begin try%lwt File.save uri ~to_:file_path >|= fun () -> true with 
+    (* 7.b if file save fails, raise fatal error *)
+    | File.File_error _ as exn -> raise exn
+    (* 7.a if download fail, warn and continue *)
+    | exn ->
+      Log.warnf ~exn "[%s] Failed saving thumbnail [%s] to [%s]"
+        media_id (uri |> Uri.to_string) file_path >|= fun () ->
+      false
+    end >>= function
+    | false -> Lwt.return None
+    | true ->
+      (* 8. update thumbnail_uri with local URI *)
+      let local_path = spf "%s:///%s/%s" local_scheme rel_path filename in
+      Update.video_thumbnail_uri (module DB) vid_id local_path >|= fun () ->
+      Some (Uri.of_string local_path)
+
+  let save_video_file (module DB : DBC)
+    ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
+  =
+    let filename = File.restrict_name_length basename ext in
+    let file_path = spf "%s/%s" abs_path filename in
+    
+    begin try%lwt File.save uri ~to_:file_path >|= fun () -> true with
+    (* 9.b if file save fails, raise fatal error *)
+    | File.File_error _ as exn -> raise exn
+    (* 9.a if download fail, warn and continue *)
+    | exn ->
+      Log.warnf ~exn "[%s] Failed saving video [%s] to [%s]"
+        media_id (uri |> Uri.to_string) file_path >|= fun () ->
+      false
+    end >>= function 
+    | false -> Lwt.return None
+    | true ->
+      (* 10. update file_uri with local URI *)
+      let local_path = spf "%s:///%s/%s" local_scheme rel_path filename in
+      Update.video_file_uri (module DB) vid_id local_path >>= fun () ->
+      (* 11. calculate file md5 and save to DB *)
+      let md5 = Digest.file file_path |> Digest.to_hex in
+      Update.video_md5 (module DB) vid_id md5 >|= fun () ->
+      let file_uri = Uri.of_string local_path in
+      Some (file_uri, md5)
+
   let save_new (module DB : DBC) t =
     (* 1. Save new video as is *)
     Insert.video (module DB) t >>= fun t ->
@@ -51,26 +99,13 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
         (* 6. figure out thumbnail extension based on URI, defaulting to .jpeg *)
         let ext = uri |> Uri.path |> File.ext =?: "jpeg"
                   |> spf "%d.%s" vid_id in
-        let filename = File.restrict_name_length basename ext in
-        let file_path = spf "%s/%s" abs_path filename in
-        (* 7. save thumbnail via streaming *)
-        begin try%lwt
-          File.save uri ~to_:file_path >>= fun () ->
-          (* 8. update thumbnail_uri with local URI *)
-          let local_path = spf "%s:///%s/%s" local_scheme rel_path filename in
-          Update.video_thumbnail_uri (module DB) vid_id local_path
-            >|= fun () ->
-          let thumbnail_uri = Some (Uri.of_string local_path) in
-          { t with thumbnail_uri }
-        with 
-        (* 7.b if file save fails, raise fatal error *)
-        | File.File_error _ as exn -> raise exn
-        (* 7.a if download fail, warn and continue *)
-        | exn ->
-          Log.warnf ~exn "[%s] Failed saving thumbnail [%s] to [%s]"
-            media_id (uri |> Uri.to_string) file_path >|= fun () ->
-          t
-        end >|= fun t -> (t, ext)
+        begin
+          save_thumb_file (module DB) ~vid_id ~media_id ~uri
+                          ~abs_path ~rel_path ~basename ~ext 
+          >|= function
+          | None -> (t, ext)
+          | Some uri -> ({ t with thumbnail_uri = Some uri }, ext)
+        end
       end >>= fun (t, thumb_ext) ->
 
       begin match file_uri with 
@@ -80,31 +115,17 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
                 =?: Video.filename t |> File.ext =?: "mov"
                 |> spf "%d.%s" vid_id in
         let ext = if ext = thumb_ext then "video." ^ ext else ext in
-        let filename = File.restrict_name_length basename ext in
-        let file_path = spf "%s/%s" abs_path filename in
-        
-        begin try%lwt
-          File.save uri ~to_:file_path >>= fun () ->
-          (* 10. update file_uri with local URI *)
-          let local_path = spf "%s:///%s/%s" local_scheme rel_path filename in
-          Update.video_file_uri (module DB) vid_id local_path >>= fun () ->
-          (* 11. calculate file md5 and save to DB *)
-          let md5 = Digest.file file_path |> Digest.to_hex in
-          Update.video_md5 (module DB) vid_id md5 >|= fun () ->
-          let file_uri = Some (Uri.of_string local_path) in
-          { t with file_uri; md5 = Some md5 }
-        with
-        (* 9.b if file save fails, raise fatal error *)
-        | File.File_error _ as exn -> raise exn
-        (* 9.a if download fail, warn and continue *)
-        | exn ->
-          Log.warnf ~exn "[%s] Failed saving video [%s] to [%s]"
-            media_id (uri |> Uri.to_string) file_path >|= fun () ->
-          t
+        begin
+          save_video_file (module DB) ~vid_id ~media_id ~uri
+                          ~abs_path ~rel_path ~basename ~ext
+          >|= function
+          | None -> t
+          | Some (local_uri, md5) ->
+            { t with file_uri = Some local_uri; md5 = Some md5 }
         end
-      end >>= fun t ->
+      end >|= fun t ->
       (* 12. return updated t *)
-      Lwt.return t
+      t
 
   let save_existing (module DB : DBC) t_id new_t =
     let%lwt old_t = match%lwt Select.video (module DB) t_id with
