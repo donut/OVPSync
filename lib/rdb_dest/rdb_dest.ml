@@ -47,6 +47,19 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
 
   type t = Video.t
 
+  (** [get_video ~ovp ~media_id] retrieves the video attached to the [ovp]  
+      (Source.name) and [media_id] combination, if any. *)
+  let get_video ~ovp ~media_id = 
+    Conf.db_pool |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
+      match%lwt Select.source (module DB) ~name:ovp ~media_id with
+      | None -> Lwt.return (Ok None)
+      | Some s -> match Source.video_id s with
+        | None -> Lwt.return (Ok None)
+        | Some id -> match%lwt Select.video (module DB) id with 
+          | None -> Lwt.return (Ok None)
+          | Some t -> Lwt.return (Ok (Some t))
+    end >>= Caqti_lwt.or_fail
+
   let gen_file_paths t =
     let canonical = Video.canonical t in
     let rel = Source.added canonical |> File.dir_of_timestamp in

@@ -51,8 +51,9 @@ let main () =
     type src_t = JW_src.t
     type dest_t = Dest.t
 
-    let dest_t_of_src_t ((vid, file', thumb) : src_t) =
+    let ovp_name = "jw-" ^ (Conf.JW_source.key conf)
 
+    let dest_t_of_src_t ((vid, file', thumb) : src_t) =
       let slug =  match BatList.assoc_opt "slug" vid.custom with
       | Some s -> s
       | None ->
@@ -117,7 +118,7 @@ let main () =
       let source = 
         { Rdb_dest.Source. 
           id = None
-        ; name =  "jw-" ^ Conf.JW_source.key conf
+        ; name =  ovp_name
         ; media_id = vid.key
         ; video_id = None
         ; added = vid.date
@@ -154,7 +155,16 @@ let main () =
       ; canonical = source
       ; sources = [ source ] }
 
-    let should_sync _ = Lwt.return true
+    let should_sync (({ key; updated; md5 }, _, _) : src_t) =
+      match%lwt Dest.get_video ~ovp:ovp_name ~media_id:key with
+      | None -> Lwt.return true
+      | Some vid ->
+        Lwt.return (
+          vid.canonical.modified <> updated
+          || vid.updated < updated
+          || vid.md5 <> md5
+        )
+
   end) in
 
   Synker.sync ()

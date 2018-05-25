@@ -4,4 +4,5 @@
   ((name main)
     (libraries (lib logger jw_client jw_source rdb_dest sync variable_store
                 batteries caqti caqti-dynload caqti-lwt lwt re re.perl))
+   (preprocess (pps (lwt.ppx)))
   ))
