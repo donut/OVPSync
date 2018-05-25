@@ -77,6 +77,9 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     let new_uri = make_local_uri rel_path filename in
     let old_uri = t |> Video.file_uri |> Bopt.get |> Uri.to_string in
     if new_uri <> old_uri then 
+      let media_id = media_id_of_video t in
+      Log.infof "[%s] Moving video file from [%s] to [%s]"
+        media_id old_uri new_uri >>= fun () ->
       let new_abs_path = abs_path_of_uri (Uri.of_string new_uri) in
       let old_abs_path
         = abs_path_of_uri (t |> Video.file_uri |> Bopt.get) in
@@ -147,13 +150,15 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     final_uri
 
   let save_new (module DB : DBC) t =
-    (* 1. Save new video as is *)
+    let media_id = media_id_of_video t in
+
+    Log.infof "[%s] Inserting into DB." media_id >>= fun () ->
     Insert.video (module DB) t >>= fun t ->
     let vid_id = Video.id t |> BatOption.get in
-    let media_id = media_id_of_video t in
-    (* 2. return if thumbnail_uri and file_uri are None *)
+
     match Video.(file_uri t, thumbnail_uri t) with
     | None, None -> 
+      Log.infof "[%s] No file or thumbnail URIs." media_id >>= fun () ->
       Lwt.return t
     | file_uri, thumb_uri ->
       let rel_path, abs_path, basename = gen_file_paths t in
@@ -162,9 +167,10 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       begin match thumb_uri with
       | None -> Lwt.return t
       | Some uri ->
-        (* 6. figure out thumbnail extension based on URI, defaulting to .jpeg *)
-        let ext = thumb_ext t in
         begin
+          let ext = thumb_ext t in
+          Log.infof "[%s] Saving thumbnail to [%s/%s.%s]"
+            media_id rel_path basename ext >>= fun () ->
           save_thumb_file (module DB) ~vid_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext 
           >|= function
@@ -176,8 +182,10 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       begin match file_uri with 
       | None -> Lwt.return t
       | Some uri ->
-        let ext = video_ext t in
         begin
+          let ext = video_ext t in
+          Log.infof "[%s] Saving video file to [%s/%s.%s]"
+            media_id rel_path basename ext >>= fun () ->
           save_video_file (module DB) ~vid_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext
           >|= function
@@ -186,7 +194,6 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
             { t with file_uri = Some local_uri; md5 = Some md5 }
         end
       end >|= fun t ->
-      (* 12. return updated t *)
       t
 
   let save_existing (module DB : DBC) t_id new_t =
@@ -194,31 +201,35 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     | None -> raise Not_found
     | Some t -> Lwt.return t
     in
-    (* 1: Copy new_t with old fields thumbnail_uri, file_uri, md5 *)
+    
     let t = Video.{ new_t with
       thumbnail_uri = old_t.thumbnail_uri;
       file_uri = old_t.file_uri;
       md5 = old_t.md5;
     } in
-    (* 2: Save copy to DB *)
+
+    let media_id = media_id_of_video t in
+
+    Log.infof "[%s] Updating fields in DB." media_id >>= fun () ->
     Update.video (module DB) t >>= fun t ->
 
-    let media_id = t |> Video.canonical |> Source.media_id in
-    (* 3: Re-download/save thumbnail *)
     let abs_path, rel_path, basename = gen_file_paths t in
     File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
 
     begin match Video.thumbnail_uri t with
     | None -> Lwt.return t
     | Some uri -> 
-      (* Don't save over the existing file in case it fails. *)
-      let ext = spf "%s.temp" (thumb_ext t) in
       begin
+        let ext = spf "%s.temp" (thumb_ext t) in
+        Log.infof "[%s] Saving thumbnail to [%s/%s.%s]"
+          media_id rel_path basename ext >>= fun () ->
         save_thumb_file (module DB) ~vid_id:t_id ~media_id ~uri
                         ~abs_path ~rel_path ~basename ~ext 
         >>= function
         | Error _ -> Lwt.return t
         | Ok uri ->
+          Log.infof "[%s] Moving thumbnail to permanent location." media_id
+            >>= fun () ->
           let%lwt uri = move_temp_file uri in
           Update.video_thumbnail_uri (module DB) t_id (Uri.to_string uri)
             >|= fun () ->
@@ -236,18 +247,21 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
         then maybe_update_video_file_path (module DB) t new_t
         else
           let ext = spf "%s.temp" (video_ext t) in
+          Log.infof "[%s] Saving video to [%s/%s.%s]"
+            media_id rel_path basename ext >>= fun () ->
           save_video_file (module DB) ~vid_id:t_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext
           >>= function
           | Error _ -> Lwt.return t
           | Ok (temp_uri, md5) ->
+            Log.infof "[%s] Moving video to permanent location." media_id
+              >>= fun () ->
             let%lwt uri = move_temp_file temp_uri in
             Update.video_file_uri (module DB) t_id (Uri.to_string uri)
               >|= fun () ->
             { t with file_uri = Some uri; md5 = Some md5 }
       end
     end >|= fun t ->
-    (* 6: Return updated t *)
     t
   
   let save t =
@@ -256,38 +270,25 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     Log.infof "Saving [%s]..." media_id >>= fun () ->
     
     Conf.db_pool |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
-      (* 1: Check if a video with one of the same ovp+media exists. *)
+      Log.infof "[%s] Checking for existing video..." media_id >>= fun () ->
       let%lwt existing = Select.source (module DB)
         ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
       
       begin match existing with
-      (* 2b: If not, save new video *)
       | None
       | Some { video_id = None } ->
+        Log.infof "[%s] Not saved before. Saving new video..." media_id
+          >>= fun () ->
         save_new (module DB) t
       | Some { video_id = Some vid_id } ->
+        Log.infof "[%s] Already exists as [%d]. Updating..."
+          media_id vid_id >>= fun () ->
         save_existing (module DB) vid_id t
       end >>= fun vid ->
-      (* 3: Update existing sources *)
-      (* 4: Save new sources *)
-      (* 5: Update canonical source if changed *)
-      (* 6: Save custom data *)
-      (* 7: Save tags *)
-      (* 8: [jwsrc] Try getting feed *)
-      (* 9a: [jwsrc] If exists, set file and thumb URIs *)
-      (* 9b: [jwsrc] If non-existent, guess at file and thumb URIs? or set None *)
-      (* 10: Use MD5 to see if existing file needs updating
-      *     Be sure JW updates the MD5 when the original video file is
-      *     replaced. *)
-      (* 11: Prepare directory to save files *)
-      (* 12: Save video file if new/changed *)
-      (* 14: Delete old video file if it wasn't replaced *)
-      (* 15: Save thumbnail file if new/changed *)
-      (* 16: Delete old thumbnail file if it wasn't replaced *)
-      (* 17: [jwsrc] Clean up passthrough conversion & expiration *)
       Lwt.return (Ok ())
     end >>= Caqti_lwt.or_fail >>= fun () ->
 
-    Lwt.return t
+    Log.infof "[%s] Finished saving." media_id >|= fun () ->
+    t
 
 end
