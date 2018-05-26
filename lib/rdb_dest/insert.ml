@@ -1,7 +1,9 @@
 
 open Lwt.Infix
+open Lib.Infix
 
 module type DBC = Caqti_lwt.CONNECTION
+module Bopt = BatOption
 
 exception Already_inserted of string * int
 
@@ -14,9 +16,9 @@ module Q = struct
 
   let video = Creq.exec
           (* title slug publish *)
-    (tup4 (tup3 string string int)
+    (tup4 (tup3 string string ptime)
           (* expires file_uri md5 width *)
-          (tup4 (option int) (option string) (option string) (option int))
+          (tup4 (option ptime) (option string) (option string) (option int))
           (* height duration thumbnail_uri description *)
           (tup4 (option int) (option int) (option string) (option string))
           (* cms_id link canonical_source_id *)
@@ -28,7 +30,7 @@ module Q = struct
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
   let source = Creq.exec
-    (tup4 string string (option int) (tup2 int int))
+    (tup4 string string (option int) (tup2 ptime ptime))
     "INSERT INTO source (name, media_id, video_id, added, modified) \
      VALUES (?, ?, ?, ?, ?)"
 
@@ -43,7 +45,7 @@ module Q = struct
 
   let source_video_id = Creq.exec
     (tup2 int int)
-    "UPDATE source_field SET video_id = ? WHERE id = ?"
+    "UPDATE source SET video_id = ? WHERE id = ?"
 
 end
 
@@ -61,8 +63,10 @@ let source_fields (module DB : DBC) source_id fields =
   DB.exec query values >>= Caqti_lwt.or_fail
 
 let source (module DB : DBC) src =
+  let added_ts = Source.added src |> Util.ptime_of_int in
+  let modified_ts = Source.modified src |> Util.ptime_of_int in
   DB.exec Q.source
-    Source.(name src, media_id src, video_id src, (added src, modified src))
+    Source.(name src, media_id src, video_id src, (added_ts, modified_ts))
     >>= Caqti_lwt.or_fail >>= fun () ->
   let%lwt id = DB.find Q.last_insert_id () >>= Caqti_lwt.or_fail in
   source_fields (module DB) id (Source.custom src) >>= fun () ->
@@ -113,8 +117,8 @@ let video_fields (module DB : DBC) video_id fields =
   DB.exec query values >>= Caqti_lwt.or_fail
 
 let video (module DB : DBC) vid =
-  begin if Video.id vid |> BatOption.is_some then
-    raise @@ Already_inserted ("video", Video.id vid |> BatOption.get)
+  begin if Video.id vid |> Bopt.is_some then
+    raise @@ Already_inserted ("video", Video.id vid |> Bopt.get)
   end;
 
   let canonical = Video.canonical vid in
@@ -133,13 +137,15 @@ let video (module DB : DBC) vid =
   ) in
   let canonical = sources |> List.find match_canonical in
   
-  let canonical_id = BatOption.get @@ Source.id canonical in
-  let file_str = Video.file_uri vid |> BatOption.map Uri.to_string in
-  let thumb_str = Video.thumbnail_uri vid |> BatOption.map Uri.to_string in
-  let link_str = Video.link vid |> BatOption.map Uri.to_string in
+ let publish_ts = Video.publish vid |> Util.ptime_of_int in
+  let expires_ts = Video.expires vid |> Bopt.map Util.ptime_of_int in
+  let canonical_id = Bopt.get @@ Source.id canonical in
+  let file_str = Video.file_uri vid |> Bopt.map Uri.to_string in
+  let thumb_str = Video.thumbnail_uri vid |> Bopt.map Uri.to_string in
+  let link_str = Video.link vid |> Bopt.map Uri.to_string in
   DB.exec Q.video
-    Video.( (title vid, slug vid, publish vid)
-          , (expires vid, file_str, md5 vid, width vid)
+    Video.( (title vid, slug vid, publish_ts)
+          , (expires_ts, file_str, md5 vid, width vid)
           , (height vid, duration vid, thumb_str, description vid)
           , (cms_id vid, link_str, canonical_id) )
     >>= Caqti_lwt.or_fail >>= fun () ->
@@ -147,7 +153,7 @@ let video (module DB : DBC) vid =
   let%lwt vid_id = DB.find Q.last_insert_id () >>= Caqti_lwt.or_fail in
 
   sources |> Lwt_list.iter_s (fun s ->
-    let id = Source.id s |> BatOption.get in
+    let id = Source.id s |> Bopt.get in
     DB.exec Q.source_video_id (vid_id, id) >>= Caqti_lwt.or_fail)
     >>= fun () ->
   let sources =

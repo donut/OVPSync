@@ -2,6 +2,7 @@
 open Lwt.Infix
 
 module type DBC = Caqti_lwt.CONNECTION
+module Bopt = BatOption
 
 exception Missing_id of string * string
 
@@ -11,7 +12,7 @@ module Q = struct
   open Caqti_type
 
   let or_insert_source = Creq.exec 
-    (tup4 string string (option int) (tup2 int int))
+    (tup4 string string (option int) (tup2 ptime ptime))
     "INSERT INTO source (name, media_id, video_id, added, modified) \
      VALUES (?, ?, ?, ?, ?) \
      ON DUPLICATE KEY UPDATE \
@@ -20,9 +21,9 @@ module Q = struct
 
   let video = Creq.exec
           (* id title slug publish *)
-    (tup4 (tup3 string string int)
+    (tup4 (tup3 string string ptime)
           (* expires file_uri md5 width *)
-          (tup4 (option int) (option string) (option string) (option int))
+          (tup4 (option ptime) (option string) (option string) (option int))
           (* height duration thumbnail_uri description *)
           (tup4 (option int) (option int) (option string) (option string))
           (* cms_id link canonical_source_id id *)
@@ -68,8 +69,10 @@ let or_insert_source_fields (module DB : DBC) src_id fields =
   or_insert_x_fields (module DB) `Source src_id fields
 
 let or_insert_source (module DB : DBC) src =
+  let added_ts = Source.added src |> Util.ptime_of_int in
+  let modified_ts = Source.modified src |> Util.ptime_of_int in
   let values =
-    Source.(name src, media_id src, video_id src, (added src, modified src)) in
+    Source.(name src, media_id src, video_id src, (added_ts, modified_ts)) in
   DB.exec Q.or_insert_source values >>= Caqti_lwt.or_fail >>= fun () ->
   let%lwt id = match Source.id src with
   | None -> DB.find Insert.Q.last_insert_id () >>= Caqti_lwt.or_fail
@@ -113,7 +116,7 @@ let video (module DB : DBC) vid =
   | Some id -> id
   in
 
-  begin if Source.id canonical |> BatOption.is_none then
+  begin if Source.id canonical |> Bopt.is_none then
     let str_id = Printf.sprintf "vid:%d ovp:%s media_id:%s"
       vid_id (Source.name canonical) (Source.media_id canonical) in
     raise @@ Missing_id ("video.canonical.id", str_id)
@@ -128,13 +131,15 @@ let video (module DB : DBC) vid =
   Delete.video_fields_not_named (module DB) vid_id field_names >>= fun () ->
   or_insert_video_fields (module DB) vid_id fields >>= fun () ->
 
-  let canonical_id = BatOption.get @@ Source.id canonical in
-  let file_str = Video.file_uri vid |> BatOption.map Uri.to_string in
-  let thumb_str = Video.thumbnail_uri vid |> BatOption.map Uri.to_string in
-  let link_str = Video.link vid |> BatOption.map Uri.to_string in
+  let publish_ts = Video.publish vid |> Util.ptime_of_int in
+  let expires_ts = Video.expires vid |> Bopt.map Util.ptime_of_int in
+  let canonical_id = Bopt.get @@ Source.id canonical in
+  let file_str = Video.file_uri vid |> Bopt.map Uri.to_string in
+  let thumb_str = Video.thumbnail_uri vid |> Bopt.map Uri.to_string in
+  let link_str = Video.link vid |> Bopt.map Uri.to_string in
   DB.exec Q.video
-    Video.( (title vid, slug vid, publish vid)
-          , (expires vid, file_str, md5 vid, width vid)
+    Video.( (title vid, slug vid, publish_ts)
+          , (expires_ts, file_str, md5 vid, width vid)
           , (height vid, duration vid, thumb_str, description vid)
           , (cms_id vid, link_str, canonical_id, vid_id) )
     >>= Caqti_lwt.or_fail >>= fun () ->

@@ -2,13 +2,14 @@
 open Lwt.Infix
 
 module type DBC = Caqti_lwt.CONNECTION
+module Bopt = BatOption
 
 module Q = struct 
 
   module Creq = Caqti_request
   open Caqti_type
 
-  let source_type = (tup3 (tup4 int string string (option int)) int int)
+  let source_type = (tup3 (tup4 int string string (option int)) ptime ptime)
 
   let source = Creq.find_opt
     (tup2 string string) source_type
@@ -33,13 +34,13 @@ module Q = struct
   let video = Creq.find_opt
     int
           (* title slug publish *)
-    (tup4 (tup3 string string int)
+    (tup4 (tup3 string string ptime)
           (* expires file_uri md5 width *)
-          (tup4 (option int) (option string) (option string) (option int))
+          (tup4 (option ptime) (option string) (option string) (option int))
           (* height duration thumbnail_uri description *)
           (tup4 (option int) (option int) (option string) (option string))
           (* cms_id link canonical_source_id created updated *)
-          (tup4 (option string) (option string) int (tup2 int int)))
+          (tup4 (option string) (option string) int (tup2 ptime ptime)))
     "SELECT title, slug, publish, expires, file_uri, md5, width, height \
           , duration, thumbnail_uri, description, cms_id, link \
           , canonical_source_id, created, updated \
@@ -60,7 +61,9 @@ end
 
 
 let source_of_row row ~custom =
-  let ((id, name, media_id, video_id), added, modified) = row in
+  let ((id, name, media_id, video_id), added_pt, modified_pt) = row in
+  let added = added_pt |> Util.int_of_ptime in
+  let modified = modified_pt |> Util.int_of_ptime in
   { Source. id = Some id; name; media_id; video_id; custom; added; modified }
 
 let source_fields (module DB : DBC) source_id =
@@ -92,7 +95,7 @@ let sources_by_video_id (module DB : DBC) video_id =
   sources
     |> List.map (fun row ->
       let id = BatTuple.(Tuple3.first row |> Tuple4.first) in
-      let custom = List.assoc_opt id fields |> BatOption.default [] in
+      let custom = List.assoc_opt id fields |> Bopt.default [] in
       source_of_row row ~custom)
     |> Lwt.return
 
@@ -103,7 +106,7 @@ let tags_by_name (module DB : DBC) names =
     D.empty names in
   let placeholders = String.concat ", " plist in
   let sql = Printf.sprintf 
-    "SELECT id, name FROM tags WHERE name IN (%s) LIMIT %d"
+    "SELECT id, name FROM tag WHERE name IN (%s) LIMIT %d"
     placeholders (List.length names) in
   let query = Caqti_request.collect
     ~oneshot:true typ Caqti_type.(tup2 int string) sql in
@@ -113,25 +116,32 @@ let video (module DB : DBC) id =
   DB.find_opt Q.video id >>= Caqti_lwt.or_fail >>= function
   | None -> Lwt.return None
   | Some (first, second, third, fourth) ->
-    let (title, slug, publish) = first in
-    let (expires, file, md5, width) = second in
+    let (title, slug, publish_pt) = first in
+    let (expires_pt, file, md5, width) = second in
     let (height, duration, thumbnail, description) = third in
-    let (cms_id, link', canonical_source_id, (created, updated)) = fourth in
+    let (cms_id, link', canonical_source_id, (created_pt, updated_pt))
+      = fourth in
 
-    let file_uri = BatOption.map Uri.of_string file in
-    let filename = Uri.path (BatOption.default Uri.empty file_uri)
+
+    let created = created_pt |> Util.int_of_ptime in
+    let updated = updated_pt |> Util.int_of_ptime in
+    let publish = publish_pt |> Util.int_of_ptime in
+    let expires = expires_pt |> Bopt.map Util.int_of_ptime in
+
+    let file_uri = Bopt.map Uri.of_string file in
+    let filename = Uri.path (Bopt.default Uri.empty file_uri)
       |> String.split_on_char '/'
       |> BatList.last in
-    let thumbnail_uri = BatOption.map Uri.of_string thumbnail in
+    let thumbnail_uri = Bopt.map Uri.of_string thumbnail in
 
     let%lwt tags = DB.collect_list Q.video_tags id >>= Caqti_lwt.or_fail in
     let%lwt custom = DB.collect_list Q.video_fields id
       >>= Caqti_lwt.or_fail in
-    let link = BatOption.map Uri.of_string link' in
+    let link = Bopt.map Uri.of_string link' in
 
     let%lwt sources = sources_by_video_id (module DB) id in
     let canonical = sources |> List.find (fun s ->
-      let id = Source.id s |> BatOption.get in
+      let id = Source.id s |> Bopt.get in
       id == canonical_source_id)
     in
 
@@ -142,5 +152,3 @@ let video (module DB : DBC) id =
       ; thumbnail_uri; description; tags; custom
       ; cms_id; link; canonical; sources }
     |> Lwt.return
-
-
