@@ -205,9 +205,11 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     in
     
     let t = Video.{ new_t with
+      id = old_t.id;
       thumbnail_uri = old_t.thumbnail_uri;
       file_uri = old_t.file_uri;
       md5 = old_t.md5;
+      canonical = { new_t.canonical with id = old_t.canonical.id }
     } in
 
     let media_id = media_id_of_video t in
