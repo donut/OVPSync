@@ -77,3 +77,6 @@ setup.log
 # Config
 config.json
 !config.example.json
+
+# Generated
+/data
