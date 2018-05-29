@@ -74,7 +74,7 @@ module Make (Src : Source)
 struct
   let sync () = 
     let stream = Src.make_stream ~should_sync:Conf.should_sync in
-    stream |> Lwt_stream.iter_s (fun src_item ->
+    stream |> Lwt_stream.iter_p (fun src_item ->
       let dest_item = Conf.dest_t_of_src_t src_item in
       Dest.save dest_item >>= fun _ ->
       Src.cleanup src_item
