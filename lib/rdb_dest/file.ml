@@ -59,8 +59,15 @@ let ext filename =
   match Re.exec_opt pattern filename with 
   | None -> None
   | Some g -> match Re.Group.all g with
-    | [| e |] -> Some e
-    | _ -> None
+    | [| _; e |] ->
+      let nums = Re.Perl.compile_pat "^\\d+$" in
+      begin match Re.exec_opt nums e with
+      (* An extenion made only of numbers is probably not a real extension. *)
+      | Some _ -> None
+      | None -> Some e
+      end
+    | g ->
+      None
 
   let basename filename = 
     let b = filename |> String.split_on_char '/' |> BatList.last in
