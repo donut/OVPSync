@@ -23,28 +23,33 @@ let unexpected_response_status_exn resp body =
 let dir_of_timestamp ts =
   let tm = Unix.gmtime (ts |> float_of_int) in
   let { tm_year; tm_mon; tm_mday } : Unix.tm = tm in
-  spf "%04d/%02d/%02d" tm_year (tm_mon + 1) tm_mday
+  spf "%04d/%02d/%02d" (tm_year + 1900) (tm_mon + 1) tm_mday
+
+let trim_slashes p =
+  let ptrn = Re.Perl.compile_pat "^/+|/+$" in
+  Re.replace_string ~all:true ptrn ~by:"" p
 
 (** [prepare_dir ~prefix path] Creates all intermediate directories from
     [prefix] to [path], including [prefix]. *)
 let rec prepare_dir ~prefix path =
+  let path = trim_slashes path in
   begin match%lwt Lwt_unix.file_exists prefix with 
   | false ->
     begin try%lwt Lwt_unix.mkdir prefix 0o775 with
     | exn -> raise @@ File_error (prefix, "failed creating dir", Some exn)
     end
   | true ->
-    let %lwt { st_kind; st_perm } = Lwt_unix.stat prefix in
+    let%lwt { st_kind; st_perm } = Lwt_unix.stat prefix in
     if not (st_kind = Unix.S_DIR) then
       (* @todo test with symbolic link to directory. Will [st_kind] be S_LNK
                or still S_DIR. *)
       raise @@ File_error (prefix, "is not a directory", None);
-    if st_perm < 0o770 then 
-      raise @@ File_error (prefix, "permissions less than 0770", None);
+    if st_perm < 0o700 then 
+      raise @@ File_error (prefix, "permissions less than 0700", None);
     Lwt.return () 
   end >>= fun () ->
   match String.split_on_char '/' path with
-  | [] -> Lwt.return prefix
+  | [] | [""] -> Lwt.return prefix
   | hd :: tl ->
     let prefix = spf "%s/%s" prefix hd in
     prepare_dir ~prefix (tl |> String.concat "/")

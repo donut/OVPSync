@@ -161,7 +161,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       Log.infof "[%s] No file or thumbnail URIs." media_id >>= fun () ->
       Lwt.return t
     | file_uri, thumb_uri ->
-      let rel_path, abs_path, basename = gen_file_paths t in
+      let abs_path, rel_path, basename = gen_file_paths t in
       File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
 
       begin match thumb_uri with
