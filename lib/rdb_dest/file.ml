@@ -79,6 +79,19 @@ let ext filename =
       let sub = String.sub base 0 (max_name_length - 3) in
       spf "%s---.%s" sub ext
 
+  (** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
+      redirects. *)
+  let rec get_uri uri =
+    let%lwt (resp, body) = Clu.Client.get uri in
+
+    match C.Response.status resp with
+    | `Found | `Moved_permanently | `See_other | `Temporary_redirect ->
+      begin match C.Header.get (C.Response.headers resp) "location" with
+      | None -> Lwt.return (resp, body)
+      | Some l -> get_uri (Uri.of_string l)
+      end
+    | _ -> Lwt.return (resp, body)
+
   let save src ~to_ =
     let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_EXCL ]) in
     let%lwt file = try%lwt Lwt_unix.openfile to_ perms 0o664 with
@@ -86,7 +99,7 @@ let ext filename =
     in
     let fch = Lwt_io.of_fd ~mode:Output file in
     
-    let%lwt (resp, body) = Clu.Client.get src in
+    let%lwt (resp, body) = get_uri src in
 
     if C.Response.status resp <> `OK then
       Lwt_io.close fch >>= fun () ->
