@@ -31,9 +31,9 @@ let thumb_ext t =
 let video_ext t = 
   let vid_id = Video.id t =?: 0 in
   let uri = Video.file_uri t =?: Uri.empty in
-  let ext = Uri.path uri |> File.ext
-          =?: Video.filename t |> File.ext =?: "mov"
-          |> spf "%d.%s" vid_id in
+  let ext =
+    ( Uri.path uri |> File.ext =?: (Video.filename t |> File.ext =?: "mov") )
+    |> spf "%d.%s" vid_id in
   let t_ext = thumb_ext t in
   (* In case some joker gave the thumbnail a video file extension, we want
      to avoid file name collisions. *)
