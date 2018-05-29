@@ -18,6 +18,12 @@ module Level = struct
     | `Debug -> (50, "debug")
     | `Trace -> (60, "trace")
 
+  let wrap_for = function
+    | `Fatal -> "!!!", "!!!"
+    | `Error -> "!#!", "!#!"
+    |  `Warn ->  "#!", "#!"
+    |      _ ->   "[", "]"
+
   let to_string t =
     t |> to_tup |> snd
   let to_int t =
@@ -40,7 +46,8 @@ module Make (Conf : Config) = struct
     else
       let datetime = datetime () in
       let lvl = Level.to_string level in
-      Lwt_io.printlf "%s [%s] %s: %s" datetime lvl Conf.prefix message
+      let lw, rw = Level.wrap_for level in
+      Lwt_io.printlf "%s %s%s%s %s: %s" datetime lw lvl rw Conf.prefix message
 
   let logf (level:Sync.logger_level) fmt =
     ksprintf (log level) fmt
