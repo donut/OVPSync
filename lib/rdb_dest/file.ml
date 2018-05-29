@@ -89,6 +89,8 @@ let ext filename =
     let%lwt (resp, body) = Clu.Client.get src in
 
     if C.Response.status resp <> `OK then
+      Lwt_io.close fch >>= fun () ->
+      Lwt_unix.unlink to_ >>= fun () ->
       unexpected_response_status_exn resp body >>= raise
     else
 
@@ -96,3 +98,8 @@ let ext filename =
       >>= fun () ->
 
     Lwt_io.close fch
+
+  let unlink_if_exists path =
+    if%lwt Lwt_unix.file_exists path
+    then Lwt_unix.unlink path
+    else Lwt.return ()

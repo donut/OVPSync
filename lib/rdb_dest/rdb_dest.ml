@@ -96,17 +96,19 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     let filename = File.restrict_name_length basename ext in
     let file_path = spf "%s/%s" abs_path filename in
     (* 7. save thumbnail via streaming *)
-    begin try%lwt File.save uri ~to_:file_path >|= fun () -> true with 
+    begin try%lwt File.save uri ~to_:file_path >|= fun () -> Ok () with 
     (* 7.b if file save fails, raise fatal error *)
     | File.File_error _ as exn -> raise exn
     (* 7.a if download fail, warn and continue *)
     | exn ->
       Log.warnf ~exn "[%s] Failed saving thumbnail [%s] to [%s]"
         media_id (uri |> Uri.to_string) file_path >|= fun () ->
-      false
+      Error exn
     end >>= function
-    | false -> Lwt.return (Error ())
-    | true ->
+    | Error _ as e ->
+      File.unlink_if_exists file_path >|= fun () ->
+      e
+    | Ok _ ->
       (* 8. update thumbnail_uri with local URI *)
       let local_path = spf "%s:///%s/%s" local_scheme rel_path filename in
       Update.video_thumbnail_uri (module DB) vid_id local_path >|= fun () ->
@@ -118,17 +120,19 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     let filename = File.restrict_name_length basename ext in
     let file_path = spf "%s/%s" abs_path filename in
     
-    begin try%lwt File.save uri ~to_:file_path >|= fun () -> true with
+    begin try%lwt File.save uri ~to_:file_path >|= fun () -> Ok () with
     (* 9.b if file save fails, raise fatal error *)
     | File.File_error _ as exn -> raise exn
     (* 9.a if download fail, warn and continue *)
     | exn ->
       Log.warnf ~exn "[%s] Failed saving video [%s] to [%s]"
         media_id (uri |> Uri.to_string) file_path >|= fun () ->
-      false
+      Error exn
     end >>= function 
-    | false -> Lwt.return (Error ())
-    | true ->
+    | Error _ as e ->
+      File.unlink_if_exists file_path >|= fun () ->
+      e
+    | Ok _ ->
       (* 10. update file_uri with local URI *)
       let local_path = make_local_uri rel_path filename in
       Update.video_file_uri (module DB) vid_id local_path >>= fun () ->
