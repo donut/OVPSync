@@ -16,6 +16,10 @@ module Q = struct
     "SELECT id, name, media_id, video_id, added, modified \
        FROM source WHERE name = ? AND media_id = ? LIMIT 1"
 
+  let source_id = Creq.find_opt
+    (tup2 string string) int
+    "SELECT id FROM source WHERE name = ? AND media_id = ? LIMIT 1"
+
   let source_fields = Creq.collect
     int (tup2 string string)
     "SELECT name, value FROM source_field WHERE source_id = ? ORDER BY name"
@@ -76,6 +80,9 @@ let source (module DB : DBC) ~name ~media_id =
     let id = BatTuple.(Tuple3.first row |> Tuple4.first) in
     let%lwt custom = source_fields (module DB) id in
     Lwt.return @@ Some (source_of_row row ~custom)
+
+let source_id (module DB : DBC) ~name ~media_id =
+  DB.find_opt Q.source_id (name, media_id) >>= Caqti_lwt.or_fail
 
 let source_fields_by_video_id (module DB : DBC) video_id =
   let%lwt fields = DB.collect_list Q.source_fields_by_video_id video_id

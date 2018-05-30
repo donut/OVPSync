@@ -68,7 +68,7 @@ let source (module DB : DBC) src =
   DB.exec Q.source
     Source.(name src, media_id src, video_id src, (added_ts, modified_ts))
     >>= Caqti_lwt.or_fail >>= fun () ->
-  let%lwt id = DB.find Q.last_insert_id () >>= Caqti_lwt.or_fail in
+  let%lwt id = Util.last_insert_id (module DB) in
   source_fields (module DB) id (Source.custom src) >>= fun () ->
   Lwt.return { src with id = Some id }
 
@@ -122,43 +122,42 @@ let video (module DB : DBC) vid =
   end;
 
   let canonical = Video.canonical vid in
-  let sources   = Video.sources vid in
   let match_canonical s = 
-    Source.(name s == name canonical && media_id s == media_id canonical)
+    Source.(name s == name canonical && media_id s == media_id canonical) in
+  let%lwt sources =
+    let lst = Video.sources vid in
+    let includes_canonical = lst |> List.exists match_canonical in
+    let lst = if includes_canonical then lst else canonical :: lst in
+    lst |> Lwt_list.map_s (fun s ->
+      match Source.id s with
+      | Some _ -> Lwt.return s
+      | None -> source (module DB) s
+    )
   in
-  let sources_include_canonical = sources |> List.exists match_canonical in
-  let sources =
-    if sources_include_canonical then sources else canonical :: sources
-  in
-  let%lwt sources = sources |> Lwt_list.map_s (fun s ->
-    match Source.id s with
-    | Some _ -> Lwt.return s
-    | None -> source (module DB) s
-  ) in
   let canonical = sources |> List.find match_canonical in
   
- let publish_ts = Video.publish vid |> Util.ptime_of_int in
-  let expires_ts = Video.expires vid |> Bopt.map Util.ptime_of_int in
-  let canonical_id = Bopt.get @@ Source.id canonical in
-  let file_str = Video.file_uri vid |> Bopt.map Uri.to_string in
-  let thumb_str = Video.thumbnail_uri vid |> Bopt.map Uri.to_string in
-  let link_str = Video.link vid |> Bopt.map Uri.to_string in
-  DB.exec Q.video
-    Video.( (title vid, slug vid, publish_ts)
-          , (expires_ts, file_str, md5 vid, width vid)
-          , (height vid, duration vid, thumb_str, description vid)
-          , (cms_id vid, link_str, canonical_id) )
-    >>= Caqti_lwt.or_fail >>= fun () ->
+  begin
+    let publish_ts = Video.publish vid |> Util.ptime_of_int in
+    let expires_ts = Video.expires vid |> Bopt.map Util.ptime_of_int in
+    let canonical_id = Bopt.get @@ Source.id canonical in
+    let file_str = Video.file_uri vid |> Bopt.map Uri.to_string in
+    let thumb_str = Video.thumbnail_uri vid |> Bopt.map Uri.to_string in
+    let link_str = Video.link vid |> Bopt.map Uri.to_string in
+    DB.exec Q.video
+      Video.( (title vid, slug vid, publish_ts)
+            , (expires_ts, file_str, md5 vid, width vid)
+            , (height vid, duration vid, thumb_str, description vid)
+            , (cms_id vid, link_str, canonical_id) )
+    >>= Caqti_lwt.or_fail
+  end >>= fun () ->
 
-  let%lwt vid_id = DB.find Q.last_insert_id () >>= Caqti_lwt.or_fail in
+  let%lwt vid_id = Util.last_insert_id (module DB) in
 
   sources |> Lwt_list.iter_s (fun s ->
     let id = Source.id s |> Bopt.get in
-    DB.exec Q.source_video_id (vid_id, id) >>= Caqti_lwt.or_fail)
-    >>= fun () ->
+    DB.exec Q.source_video_id (vid_id, id) >>= Caqti_lwt.or_fail) >>= fun () ->
   let sources =
-    List.map (fun s -> Source.({ s with video_id = Some vid_id })) sources
-  in
+    List.map (fun s -> Source.({ s with video_id = Some vid_id })) sources in
   let canonical = List.find match_canonical sources in
   
   new_tags_of (module DB) (Video.tags vid) >>= fun () ->

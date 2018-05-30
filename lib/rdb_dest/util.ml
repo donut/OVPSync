@@ -1,5 +1,28 @@
 
+module type DBC = Caqti_lwt.CONNECTION
 module Bopt = BatOption
+
+open Lwt.Infix
+
+exception Row_not_found of string
+exception Last_insert_ID_is_zero
+
+module Q = struct
+  module Creq = Caqti_request
+  open Caqti_type
+
+  let last_insert_id = Creq.find unit int "SELECT LAST_INSERT_ID()"
+end
+
+let last_insert_id_opt (module DB : DBC) =
+  match%lwt DB.find Q.last_insert_id () >>= Caqti_lwt.or_fail with 
+  |  0 -> Lwt.return None
+  | id -> Lwt.return @@ Some id
+
+let last_insert_id (module DB : DBC) =
+  match%lwt last_insert_id_opt (module DB) with
+  | None -> raise Last_insert_ID_is_zero
+  | Some id -> Lwt.return id
 
 let ptime_of_int i =
   i |> float_of_int |> Ptime.of_float_s |> Bopt.get
