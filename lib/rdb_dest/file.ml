@@ -6,19 +6,21 @@ module Clu = Cohttp_lwt_unix
 open Lwt.Infix
 
 let spf = Printf.sprintf
+let lplf fmt = Printf.ksprintf (Lwt_io.printl) fmt
+let plf fmt = Printf.ksprintf (print_endline) fmt
 
 exception File_error of string * string * exn option
 exception Unexpected_response_status of string * string * string
-
-let max_name_length = 255
-(* A safe value for most operating systems.
-   @see https://serverfault.com/a/9548/54523 *)
 
 let unexpected_response_status_exn resp body =
   let status = resp |> Cohttp.Response.status |> Cohttp.Code.string_of_status in
   let headers = resp |> Cohttp.Response.headers |> Cohttp.Header.to_string in
   Cohttp_lwt.Body.to_string body >>= fun body' ->
   Lwt.return @@ Unexpected_response_status (status, headers, body')
+
+let max_name_length = 255
+(* A safe value for most operating systems.
+   @see https://serverfault.com/a/9548/54523 *)
 
 let dir_of_timestamp ts =
   let tm = Unix.gmtime (ts |> float_of_int) in
@@ -88,14 +90,19 @@ let ext filename =
 
   (** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
       redirects. *)
-  let rec get_uri uri =
+  let rec get_uri ?(redirects=30) uri =
     let%lwt (resp, body) = Clu.Client.get uri in
+
+    (* Cut off redirect loop. *)
+    if redirects = 0
+    then Lwt.return (resp, body)
+    else
 
     match C.Response.status resp with
     | `Found | `Moved_permanently | `See_other | `Temporary_redirect ->
       begin match C.Header.get (C.Response.headers resp) "location" with
       | None -> Lwt.return (resp, body)
-      | Some l -> get_uri (Uri.of_string l)
+      | Some l -> get_uri ~redirects:(redirects - 1) (Uri.of_string l)
       end
     | _ -> Lwt.return (resp, body)
 
