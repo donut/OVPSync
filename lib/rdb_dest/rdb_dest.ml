@@ -253,7 +253,8 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     | None -> Lwt.return t
     | Some uri ->
       begin
-        if Video.md5 new_t = Video.md5 t && Video.file_uri t |> Bopt.is_some 
+        if Video.md5 new_t = Video.md5 t
+          && Video.file_uri t |> Bopt.map Uri.scheme = Some (Some local_scheme)
         then maybe_update_video_file_path (module DB) t new_t
         else
           let ext = spf "%s.temp" (video_ext new_t) in
