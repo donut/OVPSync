@@ -21,7 +21,8 @@ end
 let local_scheme = "local"
 
 let make_local_uri rel_path filename =
-  spf "%s:///%s/%s" local_scheme rel_path filename
+  let rel, name = Uri.(pct_encode rel_path, pct_encode filename) in
+  spf "%s:///%s/%s" local_scheme rel name
 
 let video_ext t = 
   let vid_id = Video.id t =?: 0 in
@@ -67,7 +68,11 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     (abs, rel, basename)
 
   let abs_path_of_uri uri =
-    Conf.files_path ^ (Uri.path uri)
+    let rel_path = 
+      Uri.path uri |> File.trim_slashes
+      |> String.split_on_char '/' |> List.map Uri.pct_decode
+      |> String.concat "/" in
+    spf "%s/%s" Conf.files_path rel_path
 
   let maybe_update_video_file_path (module DB : DBC) t new_t =
     let (_, rel_path, basename) = gen_file_paths new_t in 
@@ -106,7 +111,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       File.unlink_if_exists file_path >|= fun () ->
       e
     | Ok _ ->
-      let local_path = spf "%s:///%s/%s" local_scheme rel_path filename in
+      let local_path = make_local_uri rel_path filename in
       Update.video_thumbnail_uri (module DB) vid_id local_path >|= fun () ->
       Ok (Uri.of_string local_path)
 
@@ -145,7 +150,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       |> Uri.to_string 
       |> Re.replace_string ~all:false suffix_ptrn ~by:"" 
       |> Uri.of_string in
-    let final_path = final_uri |> Uri.to_string in
+    let final_path = abs_path_of_uri final_uri in
     Lwt_unix.rename temp_path final_path >|= fun () ->
     final_uri
 
