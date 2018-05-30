@@ -160,6 +160,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     Log.infof "[%s] Inserting into DB." media_id >>= fun () ->
     Insert.video (module DB) t >>= fun t ->
     let vid_id = Video.id t |> BatOption.get in
+    Log.infof "[%s] Inserted as [%d]." media_id vid_id >>= fun () ->
 
     match Video.(file_uri t, thumbnail_uri t) with
     | None, None -> 
