@@ -178,7 +178,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       | Some uri ->
         begin
           let ext = thumb_ext t in
-          Log.infof "[%s] Saving thumbnail to [%s/%s.%s]"
+          Log.infof "[%s] Downloading thumbnail to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
           save_thumb_file (module DB) ~vid_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext 
@@ -193,7 +193,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       | Some uri ->
         begin
           let ext = video_ext t in
-          Log.infof "[%s] Saving video file to [%s/%s.%s]"
+          Log.infof "[%s] Downloading video file to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
           save_video_file (module DB) ~vid_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext
@@ -232,7 +232,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     | Some uri -> 
       begin
         let ext = spf "%s.temp" (thumb_ext new_t) in
-        Log.infof "[%s] Saving thumbnail to [%s/%s.%s]"
+        Log.infof "[%s] Downloading thumbnail to [%s/%s.%s]"
           media_id rel_path basename ext >>= fun () ->
         save_thumb_file (module DB) ~vid_id:t_id ~media_id ~uri
                         ~abs_path ~rel_path ~basename ~ext 
@@ -258,7 +258,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
         then maybe_update_video_file_path (module DB) t new_t
         else
           let ext = spf "%s.temp" (video_ext new_t) in
-          Log.infof "[%s] Saving video to [%s/%s.%s]"
+          Log.infof "[%s] Downloading video to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
           save_video_file (module DB) ~vid_id:t_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext
