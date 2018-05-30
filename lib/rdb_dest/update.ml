@@ -6,6 +6,8 @@ module Bopt = BatOption
 
 exception Missing_id of string * string
 
+let lplf fmt = Printf.ksprintf (Lwt_io.printl) fmt
+
 module Q = struct 
 
   module Creq = Caqti_request

@@ -10,6 +10,7 @@ open Lwt.Infix
 open Lib.Infix
 
 let spf = Printf.sprintf
+let plf fmt = Printf.ksprintf (print_endline) fmt
 
 module type Config = sig
   val db_pool : (Caqti_lwt.connection, Caqti_error.t) Caqti_lwt.Pool.t
