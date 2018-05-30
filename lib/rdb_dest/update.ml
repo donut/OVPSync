@@ -76,19 +76,15 @@ let or_insert_source (module DB : DBC) src =
   DB.exec Q.or_insert_source values >>= Caqti_lwt.or_fail >>= fun () ->
 
   let%lwt id = match Source.id src with
-  | None ->
-    begin match%lwt Util.last_insert_id_opt (module DB) with
-    | Some id -> Lwt.return id
-    | None ->
-      let name, media_id = Source.(name src, media_id src) in
-      begin match%lwt Select.source_id (module DB) ~name ~media_id with
-      | None ->
-        let id = Printf.sprintf "ovp:%s media_id:%s" name media_id in
-        raise (Util.Row_not_found id)
-      | Some id -> Lwt.return id
-      end
-    end
   | Some id -> Lwt.return id
+  | None ->
+    let name, media_id = Source.(name src, media_id src) in
+    begin match%lwt Select.source_id (module DB) ~name ~media_id with
+    | None ->
+      let id = Printf.sprintf "ovp:%s media_id:%s" name media_id in
+      raise (Util.Row_not_found id)
+    | Some id -> Lwt.return id
+    end
   in
   
   let fields = Source.custom src in 

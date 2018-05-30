@@ -12,8 +12,6 @@ module Q = struct
   module Creq = Caqti_request
   open Caqti_type
 
-  let last_insert_id = Creq.find unit int "SELECT LAST_INSERT_ID()"
-
   let video = Creq.exec
           (* title slug publish *)
     (tup4 (tup3 string string ptime)
