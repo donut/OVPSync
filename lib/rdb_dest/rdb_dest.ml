@@ -21,8 +21,11 @@ end
 let local_scheme = "local"
 
 let make_local_uri rel_path filename =
-  let rel, name = Uri.(pct_encode rel_path, pct_encode filename) in
-  spf "%s:///%s/%s" local_scheme rel name
+  let rel_path = 
+    rel_path |> File.trim_slashes |> String.split_on_char '/'
+    |> List.map (Uri.pct_encode) |> String.concat "/" in
+  let filename = Uri.pct_encode filename in
+  spf "%s:///%s/%s" local_scheme rel_path filename
 
 let video_ext t = 
   let vid_id = Video.id t =?: 0 in
