@@ -91,11 +91,12 @@ let sources_of_video (module DB : DBC) vid =
   let canonical = Video.canonical vid in
   let is_canonical s =
     Source.(name s == name canonical && media_id s = media_id canonical) in
-  let sources = Video.sources vid in
-  let sources_include_canonical = List.exists is_canonical sources in
-  let sources =
-    if sources_include_canonical then sources else canonical :: sources
-    |> List.map (fun s -> Source.({ s with video_id = (Video.id vid) })) in
+  let sources = 
+    let lst = Video.sources vid in
+    let includes_canonical = List.exists is_canonical lst in
+    (if includes_canonical then lst else canonical :: lst)
+    |> List.map (fun s -> Source.({ s with video_id = (Video.id vid) }))
+  in
   (* [or_insert_sources] will add IDs if an INSERT was performed. *)
   Lwt_list.map_s (or_insert_source (module DB)) sources >>= fun sources ->
 
