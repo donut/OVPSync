@@ -206,6 +206,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       t
 
   let save_existing (module DB : DBC) t_id new_t =
+    let new_t = Video.{ new_t with id = Some t_id } in
     let%lwt old_t = match%lwt Select.video (module DB) t_id with
     | None -> raise Not_found
     | Some t -> Lwt.return t
