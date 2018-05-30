@@ -85,7 +85,9 @@ let ext filename =
     if length <= max_name_length then 
       name
     else
-      let sub = String.sub base 0 (max_name_length - 3) in
+      (* [-3] for the --- to show that it was shortened
+         [-1] for the . separating the basename and extension *)
+      let sub = String.sub base 0 (max_name_length - 4) in
       spf "%s---.%s" sub ext
 
   (** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
