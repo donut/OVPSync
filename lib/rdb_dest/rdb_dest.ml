@@ -27,13 +27,13 @@ let video_ext t =
   let vid_id = Video.id t =?: 0 in
   let uri = Video.file_uri t =?: Uri.empty in
   ( Uri.path uri |> File.ext =?: (Video.filename t |> File.ext =?: "mov") )
-  |> spf "%d.%s" vid_id
+  |> File.sanitize |> spf "%d.%s" vid_id
 
 let thumb_ext t =
   let vid_id = Video.id t =?: 0 in
   let uri = Video.thumbnail_uri t =?: Uri.empty in
   let ext = (uri |> Uri.path |> File.ext =?: "jpeg")
-            |> spf "%d.%s" vid_id in
+            |> File.sanitize |> spf "%d.%s" vid_id in
   (* In case some joker used the same extension on both the image and video,
      we want to avoid file name collisions. *)
   if ext = (video_ext t) then "thumb." ^ ext else ext
@@ -63,7 +63,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     let canonical = Video.canonical t in
     let rel = Source.added canonical |> File.dir_of_timestamp in
     let abs = spf "%s/%s" Conf.files_path rel in
-    let basename = File.basename (Video.filename t) in
+    let basename = Video.filename t |> File.sanitize |> File.basename in
     (abs, rel, basename)
 
   let abs_path_of_uri uri =
