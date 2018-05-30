@@ -220,14 +220,14 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
     Log.infof "[%s] Updating fields in DB." media_id >>= fun () ->
     Update.video (module DB) t >>= fun t ->
 
-    let abs_path, rel_path, basename = gen_file_paths t in
+    let abs_path, rel_path, basename = gen_file_paths new_t in
     File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
 
-    begin match Video.thumbnail_uri t with
+    begin match Video.thumbnail_uri new_t with
     | None -> Lwt.return t
     | Some uri -> 
       begin
-        let ext = spf "%s.temp" (thumb_ext t) in
+        let ext = spf "%s.temp" (thumb_ext new_t) in
         Log.infof "[%s] Saving thumbnail to [%s/%s.%s]"
           media_id rel_path basename ext >>= fun () ->
         save_thumb_file (module DB) ~vid_id:t_id ~media_id ~uri
@@ -240,19 +240,19 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
           let%lwt uri = move_temp_file uri in
           Update.video_thumbnail_uri (module DB) t_id (Uri.to_string uri)
             >|= fun () ->
+          (* @todo Delete old thumbnail file if renamed? *)
           { t with thumbnail_uri = Some uri }
       end
     end >>= fun t ->
 
-    begin match Video.file_uri t with
+    begin match Video.file_uri new_t with
     | None -> Lwt.return t
     | Some uri ->
       begin
         if Video.md5 new_t = Video.md5 t && Video.file_uri t |> Bopt.is_some 
-        (* 5: If file unchanged, but basename has changed, move file *)
         then maybe_update_video_file_path (module DB) t new_t
         else
-          let ext = spf "%s.temp" (video_ext t) in
+          let ext = spf "%s.temp" (video_ext new_t) in
           Log.infof "[%s] Saving video to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
           save_video_file (module DB) ~vid_id:t_id ~media_id ~uri
