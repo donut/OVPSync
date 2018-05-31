@@ -32,7 +32,7 @@ module Q = struct
 
   let sources_by_video_id = Creq.collect
     int source_type
-    "SELECT id, name, media_id, video_id, created, updated \
+    "SELECT id, name, media_id, video_id, added, modified \
        FROM source WHERE video_id = ?"
 
   let video = Creq.find_opt
@@ -128,7 +128,6 @@ let video (module DB : DBC) id =
     let (height, duration, thumbnail, description) = third in
     let (cms_id, link', canonical_source_id, (created_pt, updated_pt))
       = fourth in
-
 
     let created = created_pt |> Util.int_of_ptime in
     let updated = updated_pt |> Util.int_of_ptime in
