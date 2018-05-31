@@ -141,7 +141,7 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       let local_path = make_local_uri rel_path filename in
       Update.video_file_uri (module DB) vid_id local_path >>= fun () ->
       (* 11. calculate file md5 and save to DB *)
-      let md5 = Digest.file file_path |> Digest.to_hex in
+      let md5 = File.md5 file_path in
       Update.video_md5 (module DB) vid_id md5 >|= fun () ->
       let file_uri = Uri.of_string local_path in
       Ok (file_uri, md5)

@@ -22,6 +22,8 @@ let max_name_length = 255
 (* A safe value for most operating systems.
    @see https://serverfault.com/a/9548/54523 *)
 
+let md5 path = Digest.file path |> Digest.to_hex
+
 let sanitize name =
   let ptrn = Re.Perl.compile_pat "[\\/:]" in
   Re.replace_string ~all:true ptrn ~by:"-" name
