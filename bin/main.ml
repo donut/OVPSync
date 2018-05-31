@@ -71,9 +71,9 @@ let main () =
       let duration = match Re.exec_opt duration_ptrn vid.duration with
       | None -> None
       | Some g -> match Re.Group.all g with
-        | [| ""; "" |] -> None
-        | [| i; "" |] -> Some (int_of_string i * 1000)
-        | [| i; d |] -> Some (sprintf "%s%s0" i d |> int_of_string)
+        | [| _; ""; "" |] -> None
+        | [| _;  i; "" |] -> Some (int_of_string i * 1000)
+        | [| _;  i;  d |] -> Some (sprintf "%s%s0" i d |> int_of_string)
         | _ -> None
       in
       let thumbnail_uri = BatOption.map Uri.of_string thumb in
