@@ -205,6 +205,14 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       end >|= fun t ->
       t
 
+  let rm_old_file_if_renamed ~old ~new_ =
+    match old with
+    | Some old when old <> new_ && Uri.scheme old = Some local_scheme ->
+      Log.debugf "--> Removing old file at [%s]" (Uri.to_string old)
+        >>= fun () ->
+      File.unlink_if_exists @@ abs_path_of_uri old
+    | _ -> Lwt.return ()
+
   let save_existing (module DB : DBC) t_id new_t =
     let new_t = Video.{ new_t with id = Some t_id } in
     let%lwt old_t = match%lwt Select.video (module DB) t_id with
@@ -245,17 +253,10 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
           let%lwt uri = move_temp_file uri in
           Update.video_thumbnail_uri (module DB) t_id (Uri.to_string uri)
             >>= fun () ->
-          begin
-            (* Delete old image if it was named differently, otherwise it
-               would have been replaced in the move .temp move. *)
-            if Video.thumbnail_uri old_t <> Some uri
-              && Video.thumbnail_uri old_t |> Bopt.map Uri.scheme
-                  = Some (Some local_scheme)
-            then Video.thumbnail_uri old_t |> Bopt.get |> abs_path_of_uri
-                 |> File.unlink_if_exists
-            else Lwt.return ()
-          end >|= fun () ->
-          (* @todo Delete old thumbnail file if renamed? *)
+          (* Delete old image if it was named differently, otherwise it
+              would have been replaced in the move .temp move. *)
+          rm_old_file_if_renamed ~old:(Video.thumbnail_uri old_t) ~new_:uri
+            >|= fun () ->
           { t with thumbnail_uri = Some uri }
       end
     end >>= fun t ->
@@ -280,6 +281,8 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
               >>= fun () ->
             let%lwt uri = move_temp_file temp_uri in
             Update.video_file_uri (module DB) t_id (Uri.to_string uri)
+              >>= fun () ->
+            rm_old_file_if_renamed ~old:(Video.file_uri old_t) ~new_:uri
               >|= fun () ->
             { t with file_uri = Some uri; md5 = Some md5 }
       end
