@@ -91,15 +91,24 @@ let main () =
         | None -> []
         | Some a -> [ "author", a ]
       in
-      let status = [ "status", vid.status |> Vid_j.string_of_media_status ] in
-      let updated = [ "updated", vid.updated |> string_of_int ] in
-      let sourcetype = [ "sourcetype", vid.sourcetype
-                                       |> Vid_j.string_of_sourcetype ] in
-      let mediatype = [ "mediatype", vid.mediatype
-                                     |> Vid_j.string_of_mediatype ] in
+      let clean_j j =
+        let ptrn = Re.Perl.compile_pat "^<\"|\">$" in
+        Re.replace_string ~all:true ptrn ~by:"" j
+      in
+      let status =
+        [ "status", vid.status |> Vid_j.string_of_media_status |> clean_j ] in
+      let updated =
+        [ "updated", vid.updated |> string_of_int ] in
+      let sourcetype =
+        [ "sourcetype", vid.sourcetype |> Vid_j.string_of_sourcetype
+                                       |> clean_j ] in
+      let mediatype =
+        [ "mediatype", vid.mediatype |> Vid_j.string_of_mediatype
+                                     |> clean_j ] in
       let sourceformat = match vid.sourceformat with
       | None -> []
-      | Some s -> [ "sourceformat", s |> Vid_j.string_of_sourceformat ]
+      | Some s ->
+        [ "sourceformat", s |> Vid_j.string_of_sourceformat |> clean_j ]
       in
       let size = [ "size", vid.size |> string_of_int ] in
       let md5 = match vid.md5 with
@@ -125,7 +134,7 @@ let main () =
         ; modified = vid.updated
         ; custom = source_custom }
       in
-      
+
       { Rdb_dest.Video. 
         id = None
 
