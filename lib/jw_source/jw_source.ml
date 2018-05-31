@@ -429,9 +429,15 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
 
   in
 
-  Lwt_stream.from begin fun () ->
+  let rec try_next () =
     try%lwt next () with
-    | Jw_client.Util.Unexpected_response_status (status, headers, body) ->
+    | Jw_client.Exn.Timeout (methd, uri) ->
+      Log.warnf "Request timed out: [%s %s]" methd uri >>= fun () ->
+      (* @todo Add method recover from timeout errors without completely
+               skipping the item. Probably need to wrap
+               [match !videos_to_check with ...] section with [try] *)
+      Lwt.return None
+    | Jw_client.Exn.Unexpected_response_status (status, headers, body) ->
       Log.fatalf
         "Unexpected HTTP response\n\
           --> Status: %s\n\n\
@@ -442,6 +448,7 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
     | exn ->
       Log.fatalf ~exn "Unexpected error" >>= fun () ->
       Lwt.return None
-  end
+  in
 
+  Lwt_stream.from try_next
 end

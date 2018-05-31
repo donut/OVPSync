@@ -7,6 +7,8 @@ module C = Cohttp
 module Clwt = Cohttp_lwt
 module Clu = Cohttp_lwt_unix
 
+let lplf = Lwt_io.printlf
+
 type accounts_templates_list_body = Accounts_templates_list_body_t.t
 type accounts_templates_list_template = Accounts_templates_list_body_t.template
 type videos_conversions_list_body = Videos_conversions_list_body_t.t
@@ -83,7 +85,7 @@ module Make (Conf : Config) : Client = struct
     let now = Unix.time () in
     begin if now < !rate_limit_reset
         && !rate_limit_remaining <= Conf.rate_limit_to_leave then
-      Lwt_io.printlf "Leaving %d API hits; waiting %.0f seconds for reset..."
+      lplf "Leaving %d API hits; waiting %.0f seconds for reset..."
         !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
       Lwt_unix.sleep (!rate_limit_reset -. now)
     else
@@ -96,12 +98,18 @@ module Make (Conf : Config) : Client = struct
     let uri_str = [ api_prefix_url; path; "?"; query; ] |> String.concat "" in
     let uri = Uri.of_string uri_str in
 
-    Clu.Client.get uri >>= fun (resp, body) ->
+    let%lwt (resp, body) = try%lwt Clu.Client.get uri with
+      | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
+        Lwt.return @@ raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
+      | exn ->
+        lplf "### Request failed ###\n--> [GET %s" (Uri.to_string uri)
+          >>= fun () ->
+        raise exn
+    in
 
     let status = resp |> C.Response.status in
     let status_str = status |> C.Code.string_of_status in
-    Lwt_io.printlf "[GOT %s]\n--> %s" uri_str status_str
-      >>= fun () ->
+    lplf "[GOT %s]\n--> %s" uri_str status_str >>= fun () ->
 
     let h = resp |> C.Response.headers in
     rate_limit_reset := C.Header.get h "x-ratelimit-reset" 
@@ -111,14 +119,14 @@ module Make (Conf : Config) : Client = struct
       |> BatOption.map_default int_of_string_opt None
       |> BatOption.default 0;
 
-    Lwt_io.printlf "%d API hits remaining; Rate limit resets in %.0f seconds"
+    lplf "%d API hits remaining; Rate limit resets in %.0f seconds"
       !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
 
     match status with
     | `Too_many_requests ->
       (* Wait and try again once the limit has reset *)
       let reset = BatFloat.max (!rate_limit_reset -. Unix.time ()) 1. in
-      Lwt_io.printlf "--> Rate limit hit. Retrying in %.0f second(s)..." reset
+      lplf "--> Rate limit hit. Retrying in %.0f second(s)..." reset
         >>= fun () ->
       Lwt_unix.sleep reset >>= fun () ->
       call path ~params ()
@@ -129,7 +137,7 @@ module Make (Conf : Config) : Client = struct
     let%lwt (resp, body) = call "/accounts/templates/list" ?params () in
     begin match C.Response.status resp with
     | `OK -> Lwt.return ()
-    |   s -> unexpected_response_status_exn resp body >>= raise
+    |   s -> Exn.unexpected_response_status resp body >>= raise
     end >>= fun () ->
     let%lwt body' = Clwt.Body.to_string body in
     Lwt.return @@ Accounts_templates_list_body_j.t_of_string body'
@@ -142,7 +150,7 @@ module Make (Conf : Config) : Client = struct
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Videos_list_body_j.t_of_string body'
-    | s -> unexpected_response_status_exn resp body >>= raise
+    | s -> Exn.unexpected_response_status resp body >>= raise
 
   let videos_show media_id =
     let%lwt (resp, body) =
@@ -153,7 +161,7 @@ module Make (Conf : Config) : Client = struct
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Some (Videos_show_body_j.t_of_string body')
-    | s -> unexpected_response_status_exn resp body >>= raise
+    | s -> Exn.unexpected_response_status resp body >>= raise
 
   let videos_update key params =
     let params' = merge_params [("video_key", [key])] params in
@@ -162,7 +170,7 @@ module Make (Conf : Config) : Client = struct
     match C.Response.status resp with
     | `OK -> Lwt.return ()
     | `Not_found -> raise Not_found
-    |  s -> unexpected_response_status_exn resp body >>= raise
+    |  s -> Exn.unexpected_response_status resp body >>= raise
 
   let videos_conversions_create media_id template_key =
     let params = 
@@ -174,7 +182,7 @@ module Make (Conf : Config) : Client = struct
     | `OK 
     | `Conflict (* already exists *) -> Lwt.return ()
     | `Not_found -> raise Not_found
-    | s -> unexpected_response_status_exn resp body >>= raise
+    | s -> Exn.unexpected_response_status resp body >>= raise
 
   let videos_conversions_list media_id =
     (* Leaving parameters `result_limit` and `result_offset` uncustomizable
@@ -186,7 +194,7 @@ module Make (Conf : Config) : Client = struct
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Videos_conversions_list_body_j.t_of_string body'
     | `Not_found -> raise Not_found
-    | s -> unexpected_response_status_exn resp body >>= raise
+    | s -> Exn.unexpected_response_status resp body >>= raise
 
   let videos_conversions_delete key =
     let params = [("conversion_key", [key])] in
@@ -194,7 +202,7 @@ module Make (Conf : Config) : Client = struct
     match C.Response.status resp with
     | `OK -> Lwt.return ()
     | `Not_found -> raise Not_found
-    | s -> unexpected_response_status_exn resp body >>= raise
+    | s -> Exn.unexpected_response_status resp body >>= raise
 
   let create_conversion_by_name media_id template_name =
     let%lwt body = accounts_templates_list () in

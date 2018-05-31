@@ -7,19 +7,28 @@ module C = Cohttp
 module Clwt = Cohttp_lwt
 module Clu = Cohttp_lwt_unix
 
+let lplf = Lwt_io.printlf
+
 type v2_media_body = V2_media_body_t.t
 
 let api_prefix_url = "https://cdn.jwplayer.com/v2"
-
 
 let get path ?(params=[]) () =
   let query = Uri.encoded_of_query params in
   let uri = [ api_prefix_url; path; "?"; query; ] |> String.concat ""
             |> Uri.of_string in
-  Clu.Client.get uri >>= fun (resp, body) ->
 
+  let%lwt (resp, body) = try%lwt Clu.Client.get uri with
+    | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
+      Lwt.return @@ raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
+    | exn ->
+      lplf "### Request failed ###\n--> [GET %s" (Uri.to_string uri)
+        >>= fun () ->
+      raise exn
+  in
+      
   let status = resp |> C.Response.status |> C.Code.string_of_status in
-  Lwt_io.printlf "[GOT %s]\n--> %s" (Uri.to_string uri) status >>= fun () ->
+  lplf "[GOT %s]\n--> %s" (Uri.to_string uri) status >>= fun () ->
 
   Lwt.return (resp, body)
 
@@ -32,7 +41,7 @@ let get_media media_id ?params () =
 
   match C.Code.is_success code, status with
   | false, `Not_found -> Lwt.return None
-  | false,          _ -> unexpected_response_status_exn resp body >>= raise
+  | false,          _ -> Exn.unexpected_response_status resp body >>= raise
   | true,           _ -> 
     Clwt.Body.to_string body >>= fun body ->
     V2_media_body_j.t_of_string body |> Lwt.return_some
