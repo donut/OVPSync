@@ -244,7 +244,17 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
             >>= fun () ->
           let%lwt uri = move_temp_file uri in
           Update.video_thumbnail_uri (module DB) t_id (Uri.to_string uri)
-            >|= fun () ->
+            >>= fun () ->
+          begin
+            (* Delete old image if it was named differently, otherwise it
+               would have been replaced in the move .temp move. *)
+            if Video.thumbnail_uri old_t <> Some uri
+              && Video.thumbnail_uri old_t |> Bopt.map Uri.scheme
+                  = Some (Some local_scheme)
+            then Video.thumbnail_uri old_t |> Bopt.get |> abs_path_of_uri
+                 |> File.unlink_if_exists
+            else Lwt.return ()
+          end >|= fun () ->
           (* @todo Delete old thumbnail file if renamed? *)
           { t with thumbnail_uri = Some uri }
       end
