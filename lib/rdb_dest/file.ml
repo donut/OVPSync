@@ -115,7 +115,7 @@ let ext filename =
     | _ -> Lwt.return (resp, body)
 
   let save src ~to_ =
-    let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_EXCL ]) in
+    let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_TRUNC ]) in
     let%lwt file = try%lwt Lwt_unix.openfile to_ perms 0o664 with
     | exn -> raise @@ File_error (to_, "Failed opening/creating file", Some exn)
     in
