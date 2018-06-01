@@ -299,12 +299,17 @@ struct
  * This means we need to prepare most media before returning it and then undo
  * any changes that we made. 
  *)
-let make_stream ~(should_sync : (t -> bool Lwt.t)) : t Lwt_stream.t =
+let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
   let current_videos_set = ref [] in
   let videos_to_check = ref [] in
   let processing_videos = ref [] in
 
   let rec next () =
+    if !stop_flag then
+      Log.info "Stop flag set. Stopping sync." >>= fun () ->
+      Lwt.return None
+    else
+
     begin match !videos_to_check, !processing_videos with
     | [], [] ->
       (* Check for new videos at the current offset in case more were 

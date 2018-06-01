@@ -42,7 +42,8 @@ end
 module type Source = sig
   type t
 
-  val make_stream : should_sync:(t -> bool Lwt.t) -> t Lwt_stream.t
+  val make_stream
+    : should_sync:(t -> bool Lwt.t) -> stop_flag:(bool ref) -> t Lwt_stream.t
   val cleanup : t -> unit Lwt.t
 end
 
@@ -73,12 +74,21 @@ module Make (Src : Source)
 : Synchronizer =
 struct
   let sync () = 
-    let stream = Src.make_stream ~should_sync:Conf.should_sync in
+    (* This stop flag instructs the stream to stop streaming early.
+       When using the [_p] (parallelized) variant of [Lwt_stream.iter], 
+       exceptions raised in the passed function will be ignored and it will 
+       continue to iterate on the stream. This allows us to stop on 
+       exceptions. *)
+    let stop_flag = ref false in
+    let stream = Src.make_stream ~should_sync:Conf.should_sync ~stop_flag in
     stream |> Lwt_stream.iter_p (fun src_item ->
       let dest_item = Conf.dest_t_of_src_t src_item in
-      try%lwt Dest.save dest_item >|= ignore with | _ -> Lwt.return ()
+      try%lwt Dest.save dest_item >|= ignore with
+      | _ ->
         (* [Dest.save] should report errors. We catch them here to be sure
            clean up happens. *)
+        stop_flag := true;
+        Lwt.return ()
         >>= fun () ->
       Src.cleanup src_item
     )
