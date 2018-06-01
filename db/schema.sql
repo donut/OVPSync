@@ -10,8 +10,8 @@ CREATE TABLE `source` (
   `updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`,`media_id`),
-  KEY `source_video_id-video_id` (`video_id`),
-  CONSTRAINT `source_video_id-video_id` FOREIGN KEY (`video_id`) REFERENCES `video` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+  KEY `source.video_id->video.id` (`video_id`),
+  CONSTRAINT `source.video_id->video.id` FOREIGN KEY (`video_id`) REFERENCES `video` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create syntax for TABLE 'source_field'
@@ -22,7 +22,7 @@ CREATE TABLE `source_field` (
   `created` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`source_id`,`name`),
-  CONSTRAINT `source_field_source_id-source_id` FOREIGN KEY (`source_id`) REFERENCES `source` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+  CONSTRAINT `source_field.source_id->source.id` FOREIGN KEY (`source_id`) REFERENCES `source` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create syntax for TABLE 'tag'
@@ -67,8 +67,8 @@ CREATE TABLE `video` (
   `created` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  KEY `video_canonical_source_id-source_id` (`canonical_source_id`),
-  CONSTRAINT `video_canonical_source_id-source_id` FOREIGN KEY (`canonical_source_id`) REFERENCES `source` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY `video.canonical_source_id->source.id` (`canonical_source_id`),
+  CONSTRAINT `video.canonical_source_id->source.id` FOREIGN KEY (`canonical_source_id`) REFERENCES `source` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create syntax for TABLE 'video_field'
@@ -79,7 +79,7 @@ CREATE TABLE `video_field` (
   `created` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`video_id`,`name`),
-  CONSTRAINT `video_field_video_id-video_id` FOREIGN KEY (`video_id`) REFERENCES `video` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+  CONSTRAINT `video_field.video_id->video.id` FOREIGN KEY (`video_id`) REFERENCES `video` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Create syntax for TABLE 'video_tag'
@@ -89,7 +89,7 @@ CREATE TABLE `video_tag` (
   `created` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`video_id`,`tag_id`),
-  KEY `video_tag_tag_id-tag_id` (`tag_id`),
-  CONSTRAINT `video_tag_tag_id-tag_id` FOREIGN KEY (`tag_id`) REFERENCES `tag` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `video_tag_video_id-video_id` FOREIGN KEY (`video_id`) REFERENCES `video` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY `video_tag.tag_id->tag.id` (`tag_id`),
+  CONSTRAINT `video_tag.tag_id->tag.id` FOREIGN KEY (`tag_id`) REFERENCES `tag` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `video_tag.video_id->video.id` FOREIGN KEY (`video_id`) REFERENCES `video` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
