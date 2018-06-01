@@ -83,13 +83,13 @@ struct
     let stream = Src.make_stream ~should_sync:Conf.should_sync ~stop_flag in
     stream |> Lwt_stream.iter_p (fun src_item ->
       let dest_item = Conf.dest_t_of_src_t src_item in
-      try%lwt Dest.save dest_item >|= ignore with
-      | _ ->
-        (* [Dest.save] should report errors. We catch them here to be sure
-           clean up happens. *)
-        stop_flag := true;
-        Lwt.return ()
-        >>= fun () ->
+      begin try%lwt Dest.save dest_item >|= ignore with
+        | _ ->
+          (* [Dest.save] should report errors. We catch them here to be sure
+            clean up happens. *)
+          stop_flag := true;
+          Lwt.return ()
+      end >>= fun () ->
       Src.cleanup src_item
     )
 end
