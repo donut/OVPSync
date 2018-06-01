@@ -289,32 +289,42 @@ module Make (Log : Sync.Logger) (Conf : Config) = struct
       end
     end >|= fun t ->
     t
-  
-  let save t =
+
+  let save' (module DB : DBC) t =
     let canonical = Video.canonical t in
+    let media_id = media_id_of_video t in
+
+    Log.infof "[%s] Checking for existing video..." media_id >>= fun () ->
+    let%lwt existing = Select.source (module DB)
+      ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
+    
+    begin match existing with
+    | None
+    | Some { video_id = None } ->
+      Log.infof "[%s] Not saved before. Saving new video..." media_id
+        >>= fun () ->
+      save_new (module DB) t
+    | Some { video_id = Some vid_id } ->
+      Log.infof "[%s] Already exists as [%d]. Updating..."
+        media_id vid_id >>= fun () ->
+      save_existing (module DB) vid_id t
+    end >>= fun t ->
+
+    Lwt.return t
+  
+  let save t = 
     let media_id = media_id_of_video t in
     Log.infof "Saving [%s]..." media_id >>= fun () ->
     
     Conf.db_pool |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
-      Log.infof "[%s] Checking for existing video..." media_id >>= fun () ->
-      let%lwt existing = Select.source (module DB)
-        ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
-      
-      begin match existing with
-      | None
-      | Some { video_id = None } ->
-        Log.infof "[%s] Not saved before. Saving new video..." media_id
-          >>= fun () ->
-        save_new (module DB) t
-      | Some { video_id = Some vid_id } ->
-        Log.infof "[%s] Already exists as [%d]. Updating..."
-          media_id vid_id >>= fun () ->
-        save_existing (module DB) vid_id t
-      end >>= fun vid ->
-      Lwt.return (Ok ())
-    end >>= Caqti_lwt.or_fail >>= fun () ->
-
-    Log.infof "[%s] Finished saving." media_id >|= fun () ->
-    t
+      try%lwt save' (module DB) t >|= fun t -> Ok (Ok t) with
+      | exn -> Lwt.return @@ Ok (Error exn)
+    end >>= Caqti_lwt.or_fail >>= function
+    | Error exn ->
+      Log.errorf ~exn "[%s] Failed saving." (media_id_of_video t) >>= fun () ->
+      raise exn
+    | Ok t ->
+      Log.infof "[%s] Finished saving." media_id >|= fun () ->
+      t
 
 end

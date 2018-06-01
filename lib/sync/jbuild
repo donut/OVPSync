@@ -2,4 +2,6 @@
 
 (library
   ((name sync)
-   (libraries (batteries lwt))))
+   (libraries (batteries lwt))
+   (preprocess (pps (lwt.ppx)))
+  ))
