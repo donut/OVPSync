@@ -412,8 +412,15 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
         | true, Some { file; width; height } ->
           Log.infof "[%s] Video is published and has passthrough. RETURNING!"
             vid.key >>= fun () ->
-          (* @todo Run persistent storage cleanup if [to_check] and 
-            * [processing] are empty *)
+          let%lwt vid = 
+            (* Make sure the returned video has the right expires_date,
+               since it may have been temporarily set to null so its files
+               could be downloaded. *)
+            let%lwt m = get_changed vid.key in
+            match m.expires with 
+            | None -> Lwt.return vid
+            | expires_date -> Lwt.return { vid with expires_date }
+          in
           let thumb = original_thumb_url vid.key in
           Lwt.return (Some (vid, Some (file, width, height), Some thumb))
 
