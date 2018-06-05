@@ -1,8 +1,10 @@
 
 open Lwt.Infix
+open Lib.Infix
 open Printf
 
 module Conf = Lib.Conf
+module Bopt = BatOption
 
 
 let main () =
@@ -54,7 +56,7 @@ let main () =
     let ovp_name = "jw-" ^ (Conf.JW_source.key conf)
 
     let dest_t_of_src_t ((vid, file', thumb) : src_t) =
-      let slug =  match BatList.assoc_opt "slug" vid.custom with
+      let slug = match BatList.assoc_opt "slug" vid.custom with
       | Some s -> s
       | None ->
         BatList.assoc_opt "file_name" vid.custom |> BatOption.default vid.title
@@ -97,8 +99,6 @@ let main () =
       in
       let status =
         [ "status", vid.status |> Vid_j.string_of_media_status |> clean_j ] in
-      let updated =
-        [ "updated", vid.updated |> string_of_int ] in
       let sourcetype =
         [ "sourcetype", vid.sourcetype |> Vid_j.string_of_sourcetype
                                        |> clean_j ] in
@@ -120,7 +120,7 @@ let main () =
       | Some u -> [ "upload_session_id", u ]
       in
       let source_custom = 
-        [ author; status; updated; sourcetype; mediatype; sourceformat;
+        [ author; status; sourcetype; mediatype; sourceformat;
           size; md5; upload_session_id ]
         |> List.concat
       in
