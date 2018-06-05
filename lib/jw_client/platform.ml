@@ -102,9 +102,7 @@ module Make (Conf : Config) : Client = struct
       | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
         Lwt.return @@ raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
       | exn ->
-        lplf "### Request failed ###\n--> [GET %s" (Uri.to_string uri)
-          >>= fun () ->
-        raise exn
+        raise @@ Exn.Request_failure ("GET", (Uri.to_string uri), exn)
     in
 
     let status = resp |> C.Response.status in

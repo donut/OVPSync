@@ -80,8 +80,8 @@ struct
     | count ->
       match 15 - count/3 with
       | s when s > 0 ->
-        Log.infof "--> Few videos left processing; waiting %d seconds before checking again" s
-        >>= fun () ->
+        Log.infof "--> Only %d videos left processing; waiting %d seconds before checking again."
+          (List.length l) s >>= fun () ->
         Lwt_unix.sleep (s |> float_of_int) 
       | _ ->  Lwt.return ()
 
@@ -159,14 +159,13 @@ struct
     begin match published, vid.expires_date with
     | true, _ -> Lwt.return prev_changes
     | false, None ->
-      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
+      Log.debugf "[%s] Waiting on publish." vid.key >>= fun () ->
       Lwt.return prev_changes
     | false, Some e when e > now ->
-      Log.infof "[%s] Waiting on publish." vid.key >>= fun () ->
+      Log.debugf "[%s] Waiting on publish." vid.key >>= fun () ->
       Lwt.return prev_changes
     | false, Some _ ->
-      Log.infof "[%s] Not published; publishing..." vid.key
-        >>= fun () ->
+      Log.debugf "[%s] Not published; publishing..." vid.key >>= fun () ->
       let changes =
         { prev_changes with expires = vid.expires_date } in
       set_changed vid.key changes >>= fun () ->
@@ -201,18 +200,18 @@ struct
       end >>= fun needs_passthrough ->
 
       if needs_passthrough then
-        Log.infof "[%s] No passthrough; creating..." vid.key
+        Log.debugf "[%s] No passthrough; creating..." vid.key
           >>= fun () ->
         let changes' = { changes with passthrough = true } in
         set_changed vid.key changes' >>= fun () ->
         add_passthroug_conversion vid.key
       else
-        Log.infof "[%s] Waiting on passthrough." vid.key
+        Log.debugf "[%s] Waiting on passthrough." vid.key
     end
 
 
   let cleanup_by_media_id media_id ?changed () =
-    Log.infof "Undoing changes to [%s]" media_id >>= fun () ->
+    Log.debugf "Undoing changes to [%s]" media_id >>= fun () ->
     let%lwt { expires; passthrough } = match changed with 
     | None -> get_changed media_id
     | Some c -> Lwt.return c 
@@ -221,7 +220,7 @@ struct
     begin match expires with 
     | None -> Lwt.return ()
     | Some expires_date ->
-      Log.infof "[%s] Undoing publish" media_id >>= fun () ->
+      Log.debugf "[%s] Undoing publish" media_id >>= fun () ->
       match%lwt Client.videos_show media_id with
       | None -> Lwt.return ()
       | Some { video } ->
@@ -248,7 +247,7 @@ struct
     end >>= fun () ->
     
     begin if passthrough then
-      Log.infof "[%s] Deleting passthrough conversion" media_id >>= fun () ->
+      Log.debugf "[%s] Deleting passthrough conversion" media_id >>= fun () ->
       try%lwt Client.delete_conversion_by_name media_id "passthrough" with
       (* Likely deleted outside this program. *)
       | Not_found -> Lwt.return () 
@@ -257,7 +256,7 @@ struct
     end >>= fun () ->
 
     clear_changed media_id >>= fun () ->
-    Log.infof "[%s] Undid all changes" media_id
+    Log.infof "[%s] Undid all changes." media_id
 
 
   let cleanup ((vid, _, _) : t) = cleanup_by_media_id vid.key ()
@@ -325,36 +324,37 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
 
       begin match refreshed with
       | _, [] ->
-        Log.info "Getting next set..." >>= fun () ->
+        Log.debug "Getting next set." >>= fun () ->
         let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
         let new_offset =
           (offset |> int_of_string) + (List.length !current_videos_set) in
         Var_store.set "request_offset" (new_offset |> string_of_int)
           >>= fun () ->
-        Log.infof "--> offset: %d" new_offset >>= fun () ->
+        Log.debugf "--> offset: %d" new_offset >>= fun () ->
 
         let%lwt vids = get_set new_offset in
 
         current_videos_set := vids;
         videos_to_check := vids;
-        Log.info "--> done!" >>= fun () ->
+        Log.infof "Got new set of %d videos at offset %d"
+          (List.length vids) new_offset >>= fun () ->
 
-        Log.info "Cleaning up old changes..." >>= fun () ->
+        Log.debug "Cleaning up old changes." >>= fun () ->
         let exclude = !videos_to_check
           |> List.map (fun (v : videos_video) -> v.key)
         in
         cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
 
       | refreshed_set, refreshed_to_check ->
-        Log.info "Returned all vidoes in current set, but more were added at the current offset during that time. Processing those..." 
-          >>= fun () ->
+        Log.infof "Returned all vidoes in current set, but %d more were added at the current offset during that time. Processing those." 
+          (List.length refreshed_to_check) >>= fun () ->
         current_videos_set := refreshed_set;
         videos_to_check := refreshed_to_check;
         Lwt.return ()
       end
 
     | [], _ -> 
-      Log.info "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again..."
+      Log.debug "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again."
         >>= fun () ->
       (* Be sure we grab any updates that happened outside this program 
         * during the last pass. *)
@@ -366,6 +366,9 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
       let%lwt (refreshed_set, refreshed_to_check) =
         refresh_current_videos_set ~returned
       in
+
+      Log.infof "Checking on %d videos marked as processing."
+        (List.length refreshed_to_check) >>= fun () ->
 
       current_videos_set := refreshed_set;
       videos_to_check := refreshed_to_check;
@@ -379,12 +382,12 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
 
     match !videos_to_check with
     | [] -> 
-      Log.info "Reached the end of all videos." >>= fun () ->
+      Log.info "Processed all videos at source." >>= fun () ->
       Var_store.delete "request_offset" >>= fun () ->
       Lwt.return None
 
     | vid :: tl ->
-      Log.infof "Checking video [%s: %s]" vid.key vid.title >>= fun () ->
+      Log.debugf "Checking [%s: %s]" vid.key vid.title >>= fun () ->
       videos_to_check := tl;
 
       let%lwt sync_needed = should_sync (vid, None, None) in
@@ -405,7 +408,7 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
         Lwt.return (Some (vid, file, Some thumb))
 
       | true, `Ready, `File ->
-        Log.infof "[%s] Getting publish and passthrough status." vid.key
+        Log.debugf "[%s] Getting publish and passthrough status." vid.key
           >>= fun () ->
 
         match%lwt get_status_and_passthrough vid.key with
@@ -431,7 +434,7 @@ let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
               vid.key >>= fun () ->
             next ()
           | () ->
-            Log.infof "[%s] Adding to processing list. NEXT!" vid.key
+            Log.debugf "[%s] Adding to processing list. NEXT!" vid.key
               >>= fun () ->
             processing_videos := vid :: !processing_videos;
             (* This video isn't ready to be returned yet, take at the next

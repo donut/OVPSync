@@ -2,6 +2,7 @@
 open Lwt.Infix
 
 exception Unexpected_response_status of string * string * string
+exception Request_failure of string * string * exn
 exception Timeout of string * string
 
 let unexpected_response_status resp body =

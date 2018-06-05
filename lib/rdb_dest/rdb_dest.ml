@@ -85,7 +85,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     let old_uri = t |> Video.file_uri |> Bopt.get |> Uri.to_string in
     if new_uri <> old_uri then 
       let media_id = media_id_of_video t in
-      Log.infof "[%s] Moving video file from [%s] to [%s]"
+      Log.debugf "[%s] Moving video file from [%s] to [%s]"
         media_id old_uri new_uri >>= fun () ->
       let new_abs_path = abs_path_of_uri (Uri.of_string new_uri) in
       let old_abs_path
@@ -160,14 +160,14 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
   let save_new (module DB : DBC) t =
     let media_id = media_id_of_video t in
 
-    Log.infof "[%s] Inserting into DB." media_id >>= fun () ->
+    Log.debugf "[%s] Inserting into DB." media_id >>= fun () ->
     Insert.video (module DB) t >>= fun t ->
     let vid_id = Video.id t |> BatOption.get in
     Log.infof "[%s] Inserted as [%d]." media_id vid_id >>= fun () ->
 
     match Video.(file_uri t, thumbnail_uri t) with
     | None, None -> 
-      Log.infof "[%s] No file or thumbnail URIs." media_id >>= fun () ->
+      Log.debugf "[%s] No file or thumbnail URIs." media_id >>= fun () ->
       Lwt.return t
     | file_uri, thumb_uri ->
       let abs_path, rel_path, basename = gen_file_paths t in
@@ -230,7 +230,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
 
     let media_id = media_id_of_video t in
 
-    Log.infof "[%s] Updating fields in DB." media_id >>= fun () ->
+    Log.debugf "[%s] Updating fields in DB." media_id >>= fun () ->
     Update.video (module DB) t >>= fun t ->
 
     let abs_path, rel_path, basename = gen_file_paths new_t in
@@ -248,7 +248,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
         >>= function
         | Error _ -> Lwt.return t
         | Ok uri ->
-          Log.infof "[%s] Moving thumbnail to permanent location." media_id
+          Log.debugf "[%s] Moving thumbnail to permanent location." media_id
             >>= fun () ->
           let%lwt uri = move_temp_file uri in
           Update.video_thumbnail_uri (module DB) t_id (Uri.to_string uri)
@@ -278,7 +278,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
           >>= function
           | Error _ -> Lwt.return t
           | Ok (temp_uri, md5) ->
-            Log.infof "[%s] Moving video to permanent location." media_id
+            Log.debugf "[%s] Moving video to permanent location." media_id
               >>= fun () ->
             let%lwt uri = move_temp_file temp_uri in
             Update.video_file_uri (module DB) t_id (Uri.to_string uri)
@@ -294,18 +294,17 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     let canonical = Video.canonical t in
     let media_id = media_id_of_video t in
 
-    Log.infof "[%s] Checking for existing video..." media_id >>= fun () ->
+    Log.debugf "[%s] Checking for existing video." media_id >>= fun () ->
     let%lwt existing = Select.source (module DB)
       ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
     
     begin match existing with
     | None
     | Some { video_id = None } ->
-      Log.infof "[%s] Not saved before. Saving new video..." media_id
-        >>= fun () ->
+      Log.debugf "[%s] Saving as new video." media_id >>= fun () ->
       save_new (module DB) t
     | Some { video_id = Some vid_id } ->
-      Log.infof "[%s] Already exists as [%d]. Updating..."
+      Log.infof "[%s] Already exists as [%d]. Updating."
         media_id vid_id >>= fun () ->
       save_existing (module DB) vid_id t
     end >>= fun t ->
@@ -314,7 +313,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
   
   let save t = 
     let media_id = media_id_of_video t in
-    Log.infof "Saving [%s]..." media_id >>= fun () ->
+    Log.debugf "Saving [%s]." media_id >>= fun () ->
     
     Conf.db_pool |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
       try%lwt save' (module DB) t >|= fun t -> Ok (Ok t) with
@@ -324,7 +323,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
       Log.errorf ~exn "[%s] Failed saving." (media_id_of_video t) >>= fun () ->
       raise exn
     | Ok t ->
-      Log.infof "[%s] Finished saving." media_id >|= fun () ->
+      Log.debugf "[%s] Finished saving." media_id >|= fun () ->
       t
 
 end
