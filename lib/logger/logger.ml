@@ -1,13 +1,15 @@
 
 open Printf
 
-module type Config = sig
-  val prefix : string
-  val level : Sync.logger_level
-end
-
 module Level = struct
-  type t = Sync.logger_level
+  type t = 
+    [ `Off
+    | `Fatal
+    | `Error
+    | `Warn
+    | `Info
+    | `Debug
+    | `Trace ]
 
   let to_tup = function
     | `Off   -> ( 0,   "off")
@@ -32,7 +34,29 @@ module Level = struct
     BatInt.compare (to_int a) (to_int b)
 end
 
-module Make (Conf : Config) = struct
+module type Sig = sig
+  val log : Level.t -> string -> unit Lwt.t
+  val logf : Level.t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+  val fatal : ?exn:exn -> string -> unit Lwt.t
+  val fatalf : ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+  val error : ?exn:exn -> string -> unit Lwt.t
+  val errorf : ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+  val warn : ?exn:exn -> string -> unit Lwt.t
+  val warnf : ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+  val info : string -> unit Lwt.t
+  val infof : ('a, unit, string, unit Lwt.t) format4 -> 'a
+  val debug : string -> unit Lwt.t
+  val debugf : ('a, unit, string, unit Lwt.t) format4 -> 'a
+  val trace : string -> unit Lwt.t
+  val tracef : ('a, unit, string, unit Lwt.t) format4 -> 'a
+end
+
+module type Config = sig
+  val prefix : string
+  val level : Level.t
+end
+
+module Make (Conf : Config) : Sig = struct
   let datetime () =
     let { Unix.tm_year=yr; tm_mon=mon; tm_mday=day;
           tm_hour=hr; tm_min=min; tm_sec=sec }
@@ -40,7 +64,7 @@ module Make (Conf : Config) = struct
     in
     sprintf "%4d/%02d/%02d %2d:%02d:%02d" (yr + 1900) (mon + 1) day hr min sec
 
-  let log (level:Sync.logger_level) message =
+  let log (level : Level.t) message =
     if Level.compare Conf.level level < 0 then
       Lwt.return ()
     else
@@ -49,7 +73,7 @@ module Make (Conf : Config) = struct
       let lw, rw = Level.wrap_for level in
       Lwt_io.printlf "%s %s%s%s %s: %s" datetime lw lvl rw Conf.prefix message
 
-  let logf (level:Sync.logger_level) fmt =
+  let logf (level : Level.t) fmt =
     ksprintf (log level) fmt
 
   let add_exn_to_message exn message =

@@ -37,7 +37,7 @@ let original_thumb_url media_id =
 
 module Make (Client : Jw_client.Platform.Client)
             (Var_store : Sync.Variable_store)
-            (Log : Sync.Logger)
+            (Log : Logger.Sig)
             (Conf : Config) =
 struct
 

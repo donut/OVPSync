@@ -45,7 +45,7 @@ let thumb_ext t =
 let media_id_of_video t =
   Video.canonical t |> Source.media_id
 
-module Make (Log : Sync.Logger) (Conf : Config) = struct
+module Make (Log : Logger.Sig) (Conf : Config) = struct
   open Conf
 
   type t = Video.t

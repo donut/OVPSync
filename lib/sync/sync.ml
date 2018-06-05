@@ -11,34 +11,6 @@ module type Variable_store = sig
 end
 
 
-type logger_level =
-  [ `Off
-  | `Fatal
-  | `Error
-  | `Warn
-  | `Info
-  | `Debug
-  | `Trace ]
-
-
-module type Logger = sig
-  val log : logger_level -> string -> unit Lwt.t
-  val logf : logger_level -> ('a, unit, string, unit Lwt.t) format4 -> 'a
-  val fatal : ?exn:exn -> string -> unit Lwt.t
-  val fatalf : ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
-  val error : ?exn:exn -> string -> unit Lwt.t
-  val errorf : ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
-  val warn : ?exn:exn -> string -> unit Lwt.t
-  val warnf : ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
-  val info : string -> unit Lwt.t
-  val infof : ('a, unit, string, unit Lwt.t) format4 -> 'a
-  val debug : string -> unit Lwt.t
-  val debugf : ('a, unit, string, unit Lwt.t) format4 -> 'a
-  val trace : string -> unit Lwt.t
-  val tracef : ('a, unit, string, unit Lwt.t) format4 -> 'a
-end
-
-
 module type Source = sig
   type t
 
