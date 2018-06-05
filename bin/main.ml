@@ -106,18 +106,18 @@ let main () =
         [ "mediatype", vid.mediatype |> Vid_j.string_of_mediatype
                                      |> clean_j ] in
       let sourceformat = match vid.sourceformat with
-      | None -> []
-      | Some s ->
-        [ "sourceformat", s |> Vid_j.string_of_sourceformat |> clean_j ]
+        | None -> []
+        | Some s ->
+          [ "sourceformat", s |> Vid_j.string_of_sourceformat |> clean_j ]
       in
       let size = [ "size", vid.size |> string_of_int ] in
       let md5 = match vid.md5 with
-      | None -> []
-      | Some m -> [ "md5", m ]
+        | None -> []
+        | Some m -> [ "md5", m ]
       in
       let upload_session_id = match vid.upload_session_id with
-      | None -> []
-      | Some u -> [ "upload_session_id", u ]
+        | None -> []
+        | Some u -> [ "upload_session_id", u ]
       in
       let source_custom = 
         [ author; status; sourcetype; mediatype; sourceformat;
