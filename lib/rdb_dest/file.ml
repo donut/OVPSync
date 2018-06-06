@@ -117,7 +117,7 @@ let ext filename =
   let rec get_uri ?(redirects=30) uri =
     let%lwt (resp, body) = try%lwt Clu.Client.get uri with
       | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
-        Lwt.return @@ raise @@ Timeout ("GET", (Uri.to_string uri))
+        raise @@ Timeout ("GET", (Uri.to_string uri))
       | exn ->
         raise @@ Request_failure ("GET", (Uri.to_string uri), exn)
     in

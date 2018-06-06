@@ -106,7 +106,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
 
     let%lwt (resp, body) = try%lwt Clu.Client.get uri with
       | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
-        Lwt.return @@ raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
+        raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
       | exn ->
         raise @@ Exn.Request_failure ("GET", (Uri.to_string uri), exn)
     in
