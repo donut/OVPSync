@@ -8,11 +8,18 @@ module Q = struct
   module Creq = Caqti_request
   open Caqti_type
 
+  let source = Creq.exec
+    int
+    "DELETE FROM source WHERE id = ? LIMIT 1"
+
   let source_field = Creq.exec
     (tup2 int string)
     "DELETE FROM source_field WHERE source_id = ? AND name = ? LIMIT 1"
 
 end
+
+let source (module DB : DBC) id =
+  DB.exec Q.source id >>= Caqti_lwt.or_fail
 
 let x_fields_not_named (module DB : DBC) x x_id names =
   let x_name = match x with `Source -> "source" | `Video -> "video" in

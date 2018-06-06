@@ -297,11 +297,22 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     Log.debugf "[%s] Checking for existing video." media_id >>= fun () ->
     let%lwt existing = Select.source (module DB)
       ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
-    
+
     begin match existing with
-    | None
-    | Some { video_id = None } ->
+    | None 
+    | Some { id = None } ->
       Log.debugf "[%s] Saving as new video." media_id >>= fun () ->
+      save_new (module DB) t
+    | Some { id = Some src_id; video_id = None } ->
+      (* Looks like the process was stopped after the source was created, 
+         but before the video's inserted ID was saved to the source. Better
+         to just clear the slate and treat as new to handling all partial
+         save edge cases. No files should have been saved, and the DB
+         relations should be such that deleting the source will also delete all
+         rows in other tables that reference it. *)
+      Log.debugf "[%s] Source already exists as [%d]. Deleting before saving as new video"
+        media_id src_id >>= fun () ->
+      Delete.source (module DB) src_id >>= fun () ->
       save_new (module DB) t
     | Some { video_id = Some vid_id } ->
       Log.infof "[%s] Already exists as [%d]. Updating."
