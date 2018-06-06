@@ -1,13 +1,13 @@
 
 open Lwt.Infix
+open Lib.Infix
 open Printf
 open Util
 
+module Bopt = BatOption
 module C = Cohttp
 module Clwt = Cohttp_lwt
 module Clu = Cohttp_lwt_unix
-
-let lplf = Lwt_io.printlf
 
 type accounts_templates_list_body = Accounts_templates_list_body_t.t
 type accounts_templates_list_template = Accounts_templates_list_body_t.template
@@ -46,7 +46,7 @@ module type Client = sig
 end
 
 
-module Make (Conf : Config) : Client = struct
+module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
 
   let rate_limit_reset = ref 0.
   let rate_limit_remaining = ref 60 (* Default JW rate limit *)
@@ -77,16 +77,22 @@ module Make (Conf : Config) : Client = struct
     let signature = Sha1.(string (query ^ Conf.secret) |> to_hex) in
     ("api_signature", [signature]) :: params
 
+  let call_count = ref 0
+  let incr_call_count () =
+    let current = !call_count in
+    call_count := current + 1;
+    current
 
   (** [call path ?params ()] Make a request to the endpoint at [path] with
       [params] as the query string. *)
   let rec call path ?(params=[]) () =
     (* Avoid using up the rate limit, leaving some for other applications *)
+    let cnum = incr_call_count () in
     let now = Unix.time () in
     begin if now < !rate_limit_reset
         && !rate_limit_remaining <= Conf.rate_limit_to_leave then
-      lplf "Leaving %d API hits; waiting %.0f seconds for reset..."
-        !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
+      Log.infof "[%d] Leaving %d API hits; waiting %.0f seconds for reset."
+        cnum !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
       Lwt_unix.sleep (!rate_limit_reset -. now)
     else
       Lwt.return () 
@@ -107,24 +113,22 @@ module Make (Conf : Config) : Client = struct
 
     let status = resp |> C.Response.status in
     let status_str = status |> C.Code.string_of_status in
-    lplf "[GOT %s]\n--> %s" uri_str status_str >>= fun () ->
+    Log.debugf "[%d] [GOT %s]\n--> %s" cnum uri_str status_str >>= fun () ->
 
     let h = resp |> C.Response.headers in
     rate_limit_reset := C.Header.get h "x-ratelimit-reset" 
-      |> BatOption.map_default float_of_string_opt None
-      |> BatOption.default 0.;
+      |> Bopt.map_default float_of_string_opt None =?: 0.;
     rate_limit_remaining := C.Header.get h "x-ratelimit-remaining"
-      |> BatOption.map_default int_of_string_opt None
-      |> BatOption.default 0;
+      |> Bopt.map_default int_of_string_opt None =?: 0;
 
-    lplf "%d API hits remaining; Rate limit resets in %.0f seconds"
-      !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
+    Log.tracef "[%d] %d API hits remaining; Rate limit resets in %.0f seconds"
+      cnum !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
 
     match status with
     | `Too_many_requests ->
       (* Wait and try again once the limit has reset *)
       let reset = BatFloat.max (!rate_limit_reset -. Unix.time ()) 1. in
-      lplf "--> Rate limit hit. Retrying in %.0f second(s)..." reset
+      Log.warnf "[%d] Rate limit hit. Retrying in %.0f second(s)..." cnum reset
         >>= fun () ->
       Lwt_unix.sleep reset >>= fun () ->
       call path ~params ()

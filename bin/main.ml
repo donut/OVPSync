@@ -17,7 +17,12 @@ let main () =
   Lwt.return @@ Caqti_lwt.connect_pool db_uri >>=
   Caqti_lwt.or_fail >>= fun pool ->
 
-  let module JW = Jw_client.Platform.Make(struct 
+  let module Log_jw_client = Logger.Make(struct
+    let prefix = "JWClient"
+    let level = `Trace
+  end) in
+
+  let module JW = Jw_client.Platform.Make(Log_jw_client)(struct 
     let key = Conf.JW_source.key conf
     let secret = Conf.JW_source.secret conf
     let rate_limit_to_leave = Conf.JW_source.rate_limit_to_leave conf
@@ -28,12 +33,12 @@ let main () =
     let namespace = "JWsrc-" ^ Conf.JW_source.key conf
   end) in
 
-  let module Log_jw = Logger.Make(struct
+  let module Log_jw_src = Logger.Make(struct
     let prefix = "Src"
     let level = `Trace
   end) in
 
-  let module JW_src = Jw_source.Make(JW)(JW_var_store)(Log_jw)(struct
+  let module JW_src = Jw_source.Make(JW)(JW_var_store)(Log_jw_src)(struct
     let params = ["result_limit", ["1000"]] 
     let temp_pub_tag = "Temporarily Published"
     let backup_expires_field = "ovp_sync.backup_expires_date"
@@ -41,7 +46,7 @@ let main () =
 
   let module Log_rdb_dest = Logger.Make(struct
     let prefix = "Dest"
-    let level = `Debug
+    let level = `Trace
   end) in
 
   let module Dest = Rdb_dest.Make(Log_rdb_dest)(struct

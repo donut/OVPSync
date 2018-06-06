@@ -2,6 +2,7 @@
 
 (library
   ((name jw_client)
-   (libraries (atdgen batteries cohttp.lwt lwt sha))
+   (libraries (lib logger
+               atdgen batteries cohttp.lwt lwt sha))
    (preprocess (pps (lwt.ppx)))
   ))
