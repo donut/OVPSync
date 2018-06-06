@@ -136,10 +136,12 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
       Lwt.return (resp, body)
 
   let accounts_templates_list ?params () =
-    let%lwt (resp, body) = call "/accounts/templates/list" ?params () in
+    let path = "/accounts/templates/list" in
+    let%lwt (resp, body) = call path ?params () in
     begin match C.Response.status resp with
     | `OK -> Lwt.return ()
-    |   s -> Exn.unexpected_response_status resp body >>= raise
+    |   s ->
+      Exn.unexpected_response_status ~path ?params ~resp ~body () >>= raise
     end >>= fun () ->
     let%lwt body' = Clwt.Body.to_string body in
     Lwt.return @@ Accounts_templates_list_body_j.t_of_string body'
@@ -147,64 +149,69 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
   (** [get_videos_list ?params ()] Makes a request to the [/videos/list] 
       endpoint and returns the parsed response. *)
   let videos_list ?params () =
-    let%lwt (resp, body) = call "/videos/list" ?params () in
+    let path = "/videos/list" in
+    let%lwt (resp, body) = call path ?params () in
     match C.Response.status resp with
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Videos_list_body_j.t_of_string body'
-    | s -> Exn.unexpected_response_status resp body >>= raise
+    | s -> Exn.unexpected_response_status ~path ?params ~resp ~body () >>= raise
 
   let videos_show media_id =
-    let%lwt (resp, body) =
-      call "/videos/show" ~params:[("video_key", [media_id])] ()
-    in
+    let path, params = "/videos/show", [("video_key", [media_id])] in
+    let%lwt (resp, body) = call path ~params () in
     match C.Response.status resp with
     | `Not_found -> Lwt.return None
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Some (Videos_show_body_j.t_of_string body')
-    | s -> Exn.unexpected_response_status resp body >>= raise
+    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_update key params =
-    let params' = merge_params [("video_key", [key])] params in
-    let%lwt (resp, body) = call "/videos/update" ~params:params' () in
+    let path = "/videos/update" in
+    let params = merge_params [("video_key", [key])] params in
+    let%lwt (resp, body) = call path ~params () in
 
     match C.Response.status resp with
     | `OK -> Lwt.return ()
     | `Not_found -> raise Not_found
-    |  s -> Exn.unexpected_response_status resp body >>= raise
+    |  s ->
+      Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_conversions_create media_id template_key =
+    let path = "/videos/conversions/create" in
     let params = 
       [ ("video_key", [media_id])
       ; ("template_key", [template_key]) ]
     in
-    let%lwt (resp, body) = call "/videos/conversions/create" ~params () in
+    let%lwt (resp, body) = call path ~params () in
     match C.Response.status resp with
     | `OK 
     | `Conflict (* already exists *) -> Lwt.return ()
     | `Not_found -> raise Not_found
-    | s -> Exn.unexpected_response_status resp body >>= raise
+    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_conversions_list media_id =
+    let path = "/videos/conversions/list" in
     (* Leaving parameters `result_limit` and `result_offset` uncustomizable
      * as 1000 should way more than cover the possibilities for us at RTM. *)
     let params = [("video_key", [media_id]); ("result_limit", ["1000"])] in
-    let%lwt (resp, body) = call "/videos/conversions/list" ~params () in
+    let%lwt (resp, body) = call path ~params () in
     match C.Response.status resp with
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Videos_conversions_list_body_j.t_of_string body'
     | `Not_found -> raise Not_found
-    | s -> Exn.unexpected_response_status resp body >>= raise
+    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_conversions_delete key =
-    let params = [("conversion_key", [key])] in
-    let%lwt (resp, body) = call "/videos/conversions/delete" ~params () in
+    let path, params =
+      "/videos/conversions/delete",  [("conversion_key", [key])] in
+    let%lwt (resp, body) = call path ~params () in
     match C.Response.status resp with
     | `OK -> Lwt.return ()
     | `Not_found -> raise Not_found
-    | s -> Exn.unexpected_response_status resp body >>= raise
+    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let create_conversion_by_name media_id template_name =
     let%lwt body = accounts_templates_list () in

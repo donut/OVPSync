@@ -18,31 +18,24 @@ let get path ?(params=[]) () =
   let uri = [ api_prefix_url; path; "?"; query; ] |> String.concat ""
             |> Uri.of_string in
 
-  let%lwt (resp, body) = try%lwt Clu.Client.get uri with
-    | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
-      Lwt.return @@ raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
-    | exn ->
-      lplf "### Request failed ###\n--> [GET %s" (Uri.to_string uri)
-        >>= fun () ->
-      raise exn
-  in
-      
-  let status = resp |> C.Response.status |> C.Code.string_of_status in
-  lplf "[GOT %s]\n--> %s" (Uri.to_string uri) status >>= fun () ->
-
-  Lwt.return (resp, body)
-
+  try%lwt Clu.Client.get uri with
+  | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
+    raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
+  | exn ->
+    raise @@ Exn.Request_failure ("GET", (Uri.to_string uri), exn)
 
 let get_media media_id ?params () =
-  get ("/media/" ^ media_id) ?params () >>= fun (resp, body) ->
+  let path = "/media/" ^ media_id in
+  get path ?params () >>= fun (resp, body) ->
   
   let status = resp |> C.Response.status in
   let code   = C.Code.code_of_status status in
 
   match C.Code.is_success code, status with
   | false, `Not_found -> Lwt.return None
-  | false,          _ -> Exn.unexpected_response_status resp body >>= raise
+  | false,          _ ->
+    Exn.unexpected_response_status ~path ?params ~resp ~body () >>= raise
   | true,           _ -> 
-    Clwt.Body.to_string body >>= fun body ->
-    V2_media_body_j.t_of_string body |> Lwt.return_some
+    Clwt.Body.to_string body >|= fun body ->
+    Some (V2_media_body_j.t_of_string body)
 
