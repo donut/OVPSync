@@ -10,13 +10,29 @@ let lplf fmt = Printf.ksprintf (Lwt_io.printl) fmt
 let plf fmt = Printf.ksprintf (print_endline) fmt
 
 exception File_error of string * string * exn option
+exception Request_failure of string * string * exn
+exception Timeout of string * string
 exception Unexpected_response_status of string * string * string
 
-let unexpected_response_status_exn resp body =
-  let status = resp |> Cohttp.Response.status |> Cohttp.Code.string_of_status in
-  let headers = resp |> Cohttp.Response.headers |> Cohttp.Header.to_string in
-  Cohttp_lwt.Body.to_string body >>= fun body' ->
-  Lwt.return @@ Unexpected_response_status (status, headers, body')
+let unexpected_response_status_exn
+  ?(meth="GET") ?(params=[]) ~path ~resp ~body ()
+=
+  let request =
+    let query = Uri.encoded_of_query params in
+    [ path; "?"; query; ] |> String.concat ""
+  in
+  let%lwt resp_str = 
+    let status = Cohttp.Response.status resp |> Cohttp.Code.string_of_status in
+    let headers = Cohttp.Response.headers resp |> Cohttp.Header.to_string in
+    let%lwt body = Cohttp_lwt.Body.to_string body in
+    Printf.sprintf
+      "### Status: %s ###\n \
+       ### Headers ###\n%s\n\n \
+       ### Body ###\n%s\n### END Body ###\n"
+      status headers body 
+    |> Lwt.return
+  in
+  Lwt.return @@ Unexpected_response_status (meth, request, resp_str)
 
 let max_name_length = 255
 (* A safe value for most operating systems.
@@ -99,7 +115,12 @@ let ext filename =
   (** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
       redirects. *)
   let rec get_uri ?(redirects=30) uri =
-    let%lwt (resp, body) = Clu.Client.get uri in
+    let%lwt (resp, body) = try%lwt Clu.Client.get uri with
+      | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
+        Lwt.return @@ raise @@ Timeout ("GET", (Uri.to_string uri))
+      | exn ->
+        raise @@ Request_failure ("GET", (Uri.to_string uri), exn)
+    in
 
     (* Cut off redirect loop. *)
     if redirects = 0
@@ -126,7 +147,8 @@ let ext filename =
     if C.Response.status resp <> `OK then
       Lwt_io.close fch >>= fun () ->
       Lwt_unix.unlink to_ >>= fun () ->
-      unexpected_response_status_exn resp body >>= raise
+      unexpected_response_status_exn ~path:(Uri.to_string src) ~resp ~body ()
+      >>= raise
     else
 
     Clwt.Body.to_stream body |> Lwt_stream.iter_s (Lwt_io.write fch)
