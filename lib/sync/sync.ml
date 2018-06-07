@@ -17,6 +17,7 @@ module type Source = sig
   val make_stream
     : should_sync:(t -> bool Lwt.t) -> stop_flag:(bool ref) -> t Lwt_stream.t
   val cleanup : t -> unit Lwt.t
+  val final_cleanup : unit -> unit Lwt.t
 end
 
 
@@ -63,5 +64,7 @@ struct
           Lwt.return ()
       end >>= fun () ->
       Src.cleanup src_item
-    )
+    end >>= fun () ->
+    Src.final_cleanup ()
+    
 end
