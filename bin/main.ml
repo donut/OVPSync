@@ -164,7 +164,7 @@ let main () =
       ; custom = vid.custom
 
       ; cms_id
-      ; link = vid.link |> BatOption.map Uri.of_string
+      ; link = vid.link >|? Uri.of_string
 
       ; canonical = source
       ; sources = [ source ] }

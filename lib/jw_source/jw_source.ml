@@ -2,6 +2,8 @@
 open Lwt.Infix
 open Printf
 
+module Bopt = BatOption
+
 
 module Modified = struct
   open Sexplib.Std
@@ -273,7 +275,7 @@ struct
       let (_, media_id) = BatString.replace ~str:key ~sub:prefix ~by:"" in
       (media_id, changes))
     |> List.filter (fun (media_id, _) ->
-      BatOption.is_none @@ List.find_opt ((=) media_id) exclude)
+      Bopt.is_none @@ List.find_opt ((=) media_id) exclude)
     |> List.map (fun (media_id, changes) ->
       (media_id, Modified.of_string changes))
     |> List.filter (fun ((_, { timestamp }) : string * Modified.t) ->
