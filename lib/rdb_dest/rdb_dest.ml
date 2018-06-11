@@ -53,15 +53,15 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
   (** [get_video ~ovp ~media_id] retrieves the video attached to the [ovp]  
       (Source.name) and [media_id] combination, if any. *)
   let get_video ~ovp ~media_id = 
-    Conf.db_pool |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
+    Util.try_use_pool Conf.db_pool begin fun (module DB : DBC) ->
       match%lwt Select.source (module DB) ~name:ovp ~media_id with
-      | None -> Lwt.return (Ok None)
+      | None -> Lwt.return None
       | Some s -> match Source.video_id s with
-        | None -> Lwt.return (Ok None)
+        | None -> Lwt.return None
         | Some id -> match%lwt Select.video (module DB) id with 
-          | None -> Lwt.return (Ok None)
-          | Some t -> Lwt.return (Ok (Some t))
-    end >>= Caqti_lwt.or_fail
+          | None -> Lwt.return None
+          | Some t -> Lwt.return (Some t)
+    end
 
   let gen_file_paths t =
     let canonical = Video.canonical t in
@@ -290,34 +290,41 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     end >|= fun t ->
     t
 
-  let save' (module DB : DBC) t =
+  let save' t (module DB : DBC) =
     let canonical = Video.canonical t in
     let media_id = media_id_of_video t in
 
-    Log.debugf "[%s] Checking for existing video." media_id >>= fun () ->
-    let%lwt existing = Select.source (module DB)
-      ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
-
-    begin match existing with
-    | None 
-    | Some { id = None } ->
-      Log.debugf "[%s] Saving as new video." media_id >>= fun () ->
-      save_new (module DB) t
-    | Some { id = Some src_id; video_id = None } ->
-      (* Looks like the process was stopped after the source was created, 
-         but before the video's inserted ID was saved to the source. Better
-         to just clear the slate and treat as new to handling all partial
-         save edge cases. No files should have been saved, and the DB
-         relations should be such that deleting the source will also delete all
-         rows in other tables that reference it. *)
-      Log.debugf "[%s] Source already exists as [%d]. Deleting before saving as new video"
-        media_id src_id >>= fun () ->
-      Delete.source (module DB) src_id >>= fun () ->
-      save_new (module DB) t
-    | Some { video_id = Some vid_id } ->
+    begin match Video.id t with
+    | Some vid_id -> 
       Log.infof "[%s] Already exists as [%d]. Updating."
         media_id vid_id >>= fun () ->
       save_existing (module DB) vid_id t
+
+    | None ->
+      Log.debugf "[%s] Checking for existing video." media_id >>= fun () ->
+      let%lwt existing = Select.source (module DB)
+        ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
+
+      begin match existing with
+      | None | Some { id = None } ->
+        Log.debugf "[%s] Saving as new video." media_id >>= fun () ->
+        save_new (module DB) t
+      | Some { id = Some src_id; video_id = None } ->
+        (* Looks like the process was stopped after the source was created, 
+          but before the video's inserted ID was saved to the source. Better
+          to just clear the slate and treat as new instead of handling all 
+          partial save edge cases. No files should have been saved, and the DB
+          relations should be such that deleting the source will also delete all
+          rows in other tables that reference it. *)
+        Log.debugf "[%s] Source already exists as [%d]. Deleting before saving as new video"
+          media_id src_id >>= fun () ->
+        Delete.source (module DB) src_id >>= fun () ->
+        save_new (module DB) t
+      | Some { video_id = Some vid_id } ->
+        Log.infof "[%s] Already exists as [%d]. Updating."
+          media_id vid_id >>= fun () ->
+        save_existing (module DB) vid_id t
+      end
     end >>= fun t ->
 
     Lwt.return t
@@ -326,15 +333,13 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     let media_id = media_id_of_video t in
     Log.debugf "Saving [%s]." media_id >>= fun () ->
     
-    Conf.db_pool |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
-      try%lwt save' (module DB) t >|= fun t -> Ok (Ok t) with
-      | exn -> Lwt.return @@ Ok (Error exn)
-    end >>= Caqti_lwt.or_fail >>= function
-    | Error exn ->
+    let%lwt t = try%lwt Util.try_use_pool Conf.db_pool (save' t) with
+    | exn ->
       Log.errorf ~exn "[%s] Failed saving." (media_id_of_video t) >>= fun () ->
       raise exn
-    | Ok t ->
-      Log.debugf "[%s] Finished saving." media_id >|= fun () ->
-      t
+    in
+
+    Log.debugf "[%s] Finished saving." media_id >|= fun () ->
+    t
 
 end

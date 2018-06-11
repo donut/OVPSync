@@ -23,3 +23,11 @@ let ptime_of_int i =
   i |> float_of_int |> Ptime.of_float_s |> Bopt.get
 let int_of_ptime p =
   p |> Ptime.to_float_s |> int_of_float
+
+let try_use_pool p f =
+  p |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
+    try%lwt f (module DB : DBC) >|= fun x -> Ok (Ok x) with
+    | exn -> Lwt.return @@ Ok (Error exn)
+  end >>= Caqti_lwt.or_fail >|= function
+  | Error exn -> raise exn
+  | Ok x -> x
