@@ -21,10 +21,10 @@ module Level = struct
     | `Trace -> (60, "trace")
 
   let wrap_for = function
-    | `Fatal -> "❗❗", "❗❗"
-    | `Error -> "❗️", "❗"
-    |  `Warn -> "⚠️", "⚠️"
-    |  `Info -> "•", "•"
+    | `Fatal -> "📛 ", "📛"
+    | `Error -> "❗️ ", "❗"
+    |  `Warn -> "⚠️  ", " ⚠️"
+    |  `Info -> " •", "•"
     | `Debug -> "‹", "›"
     | `Trace -> "·", "·"
     |   `Off -> "␀", "␀"
