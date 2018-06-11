@@ -88,14 +88,14 @@ let main () =
         | [| _;  i;  d |] -> Some (sprintf "%s%s0" i d |> int_of_string)
         | _ -> None
       in
-      let thumbnail_uri = BatOption.map Uri.of_string thumb in
+      let thumbnail_uri = thumb >|? Uri.of_string in
 
       let tags = String.split_on_char ',' vid.tags
         |> List.map String.trim
       in
 
       let cms_id = BatList.assoc_opt "RTM_site_ID" vid.custom 
-        |> BatOption.map ((^) "rightthisminute.com-")
+                   >|? ((^) "rightthisminute.com-")
       in
 
       let module Vid_j = Jw_client.Videos_video_j in

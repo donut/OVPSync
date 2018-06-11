@@ -99,8 +99,7 @@ let or_insert_source (module DB : DBC) src =
 
 let sources_of_video (module DB : DBC) vid =
   let canonical = Video.canonical vid in
-  let is_canonical s =
-    Source.(name s == name canonical && media_id s = media_id canonical) in
+  let is_canonical = Source.are_same canonical in
   let sources = 
     let lst = Video.sources vid in
     let includes_canonical = List.exists is_canonical lst in

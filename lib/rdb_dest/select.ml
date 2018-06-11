@@ -123,11 +123,10 @@ let video (module DB : DBC) id =
   DB.find_opt Q.video id >>= Caqti_lwt.or_fail >>= function
   | None -> Lwt.return None
   | Some (first, second, third, fourth) ->
-    let (title, slug, publish_pt) = first in
-    let (expires_pt, file, md5, width) = second in
-    let (height, duration, thumbnail, description) = third in
-    let (cms_id, link', canonical_source_id, (created_pt, updated_pt))
-      = fourth in
+    let title, slug, publish_pt = first in
+    let expires_pt, file, md5, width = second in
+    let height, duration, thumbnail, description = third in
+    let cms_id, link', canonical_source_id, (created_pt, updated_pt) = fourth in
 
     let created = created_pt |> Util.int_of_ptime in
     let updated = updated_pt |> Util.int_of_ptime in

@@ -8,3 +8,6 @@ type t = {
   modified : int; (* When the source was last modified at the OVP *)
   custom : (string * string) list;
 } [@@deriving fields]
+
+let are_same a b =
+  name a = name b && media_id a = media_id b
