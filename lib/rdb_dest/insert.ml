@@ -47,7 +47,7 @@ module Q = struct
 
 end
 
-let source_fields (module DB : DBC) source_id fields =
+let source_fields pl source_id fields =
   let module D = Dynaparam in
   let (D.Pack (typ, values, placeholders)) = List.fold_left (fun pk (n, v) ->
     D.add Caqti_type.(tup3 int string string) (source_id, n, v) "(?, ?, ?)" pk
@@ -58,24 +58,23 @@ let source_fields (module DB : DBC) source_id fields =
     "INSERT INTO source_field (source_id, name, value) VALUES %s" placeholders
   in
   let query = Caqti_request.exec ~oneshot:true typ sql in
-  DB.exec query values >>= Caqti_lwt.or_fail
+  Util.exec pl query values
 
-let source (module DB : DBC) src =
+let source pl src =
   let added_ts = Source.added src |> Util.ptime_of_int in
   let modified_ts = Source.modified src |> Util.ptime_of_int in
-  DB.exec Q.source
+  Util.insert pl Q.source
     Source.(name src, media_id src, video_id src, (added_ts, modified_ts))
-    >>= Caqti_lwt.or_fail >>= fun () ->
-  let%lwt id = Util.last_insert_id (module DB) in
-  source_fields (module DB) id (Source.custom src) >>= fun () ->
+    >>= fun id ->
+  source_fields pl id (Source.custom src) >>= fun () ->
   Lwt.return { src with id = Some id }
 
-let new_tags_of (module DB : DBC) lst = 
+let new_tags_of pl lst = 
   (* Existing names are filtered out to void incrementing the autoincrement
    * counter, as `ON DUPLICATE KEY UPDATE` does. This process is expected to
    * be run many times with mostly existing tags, since there is a reliatvely
    * small pool of tags but a large number of videos. *)
-  let%lwt existing = Select.tags_by_name (module DB) lst in
+  let%lwt existing = Select.tags_by_name pl lst in
   let names = lst |> List.filter
     (fun n -> not @@ List.exists (fun (_, n') -> n == n') existing) in
   match List.length names with 
@@ -88,9 +87,9 @@ let new_tags_of (module DB : DBC) lst =
       "INSERT INTO tag (name) VALUES %s ON DUPLICATE KEY UPDATE id=id"
       (String.concat ", " placeholders) in
     let query = Caqti_request.exec typ sql in
-    DB.exec query values >>= Caqti_lwt.or_fail
+    Util.exec pl query values
 
-let video_tag_relations (module DB : DBC) video_id tag_ids =
+let video_tag_relations pl video_id tag_ids =
   let module D = Dynaparam in
   let (D.Pack (typ, values, placeholders)) = List.fold_left
     (fun pack tag_id ->
@@ -100,9 +99,9 @@ let video_tag_relations (module DB : DBC) video_id tag_ids =
     "INSERT INTO video_tag (video_id, tag_id) VALUES %s"
     (String.concat ", " placeholders) in
   let query = Caqti_request.exec typ sql in
-  DB.exec query values >>= Caqti_lwt.or_fail
+  Util.exec pl query values
 
-let video_fields (module DB : DBC) video_id fields =
+let video_fields pl video_id fields =
   let module D = Dynaparam in
   let (D.Pack (typ, values, placeholders)) = List.fold_left
     (fun pk (n, v) ->
@@ -112,9 +111,9 @@ let video_fields (module DB : DBC) video_id fields =
   let sql = Printf.sprintf
     "INSERT INTO video_field (video_id, name, value) VALUES %s" placeholders in
   let query = Caqti_request.exec ~oneshot:true typ sql in
-  DB.exec query values >>= Caqti_lwt.or_fail
+  Util.exec pl query values
 
-let video (module DB : DBC) vid =
+let video pl vid =
   begin if Video.id vid |> Bopt.is_some then
     raise @@ Already_inserted ("video", Video.id vid |> Bopt.get)
   end;
@@ -129,7 +128,7 @@ let video (module DB : DBC) vid =
     lst |> Lwt_list.map_s (fun s ->
       match Source.id s with
       | Some _ -> Lwt.return s
-      | None -> source (module DB) s
+      | None -> source pl s
     )
   in
   let canonical = sources |> List.find match_canonical in
@@ -141,28 +140,25 @@ let video (module DB : DBC) vid =
     let file_str = Video.file_uri vid |> Bopt.map Uri.to_string in
     let thumb_str = Video.thumbnail_uri vid |> Bopt.map Uri.to_string in
     let link_str = Video.link vid |> Bopt.map Uri.to_string in
-    DB.exec Q.video
+    Util.insert pl Q.video
       Video.( (title vid, slug vid, publish_ts)
             , (expires_ts, file_str, md5 vid, width vid)
             , (height vid, duration vid, thumb_str, description vid)
             , (cms_id vid, link_str, canonical_id) )
-    >>= Caqti_lwt.or_fail
-  end >>= fun () ->
-
-  let%lwt vid_id = Util.last_insert_id (module DB) in
+  end >>= fun vid_id ->
 
   sources |> Lwt_list.iter_s (fun s ->
     let id = Source.id s |> Bopt.get in
-    DB.exec Q.source_video_id (vid_id, id) >>= Caqti_lwt.or_fail) >>= fun () ->
+    Util.exec pl Q.source_video_id (vid_id, id)) >>= fun () ->
   let sources =
     List.map (fun s -> Source.({ s with video_id = Some vid_id })) sources in
   let canonical = List.find match_canonical sources in
   
-  new_tags_of (module DB) (Video.tags vid) >>= fun () ->
-  let%lwt tags = Select.tags_by_name (module DB) (Video.tags vid) in
+  new_tags_of pl (Video.tags vid) >>= fun () ->
+  let%lwt tags = Select.tags_by_name pl (Video.tags vid) in
   let tag_ids = List.map fst tags in
-  video_tag_relations (module DB) vid_id tag_ids >>= fun () ->
+  video_tag_relations pl vid_id tag_ids >>= fun () ->
   
-  video_fields (module DB) vid_id (Video.custom vid) >>= fun () ->
+  video_fields pl vid_id (Video.custom vid) >>= fun () ->
 
   Lwt.return { vid with id = Some vid_id; canonical; sources }

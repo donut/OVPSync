@@ -24,10 +24,27 @@ let ptime_of_int i =
 let int_of_ptime p =
   p |> Ptime.to_float_s |> int_of_float
 
-let try_use_pool p f =
+let use_pool p f = Caqti_lwt.Pool.use f p >>= Caqti_lwt.or_fail
+
+let use_pool' p f =
   p |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
     try%lwt f (module DB : DBC) >|= fun x -> Ok (Ok x) with
     | exn -> Lwt.return @@ Ok (Error exn)
   end >>= Caqti_lwt.or_fail >|= function
   | Error exn -> raise exn
   | Ok x -> x
+
+let exec pool query values = 
+  use_pool pool (fun (module DB : DBC) -> DB.exec query values)
+
+let insert pool query values =
+  use_pool' pool begin fun (module DB : DBC) ->
+    DB.exec query values >>= Caqti_lwt.or_fail >>= fun () ->
+    last_insert_id (module DB)
+  end
+
+let collect_list pool query values =
+  use_pool pool (fun (module DB : DBC) -> DB.collect_list query values)
+
+let find_opt pool query values =
+  use_pool pool (fun (module DB : DBC) -> DB.find_opt query values)

@@ -53,20 +53,16 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
   (** [get_video ~ovp ~media_id] retrieves the video attached to the [ovp]  
       (Source.name) and [media_id] combination, if any. *)
   let get_video ~ovp ~media_id = 
-    Util.try_use_pool Conf.db_pool begin fun (module DB : DBC) ->
-      match%lwt Select.source (module DB) ~name:ovp ~media_id with
+    match%lwt Select.source Conf.db_pool ~name:ovp ~media_id with
+    | None -> Lwt.return None
+    | Some s -> match Source.video_id s with
       | None -> Lwt.return None
-      | Some s -> match Source.video_id s with
+      | Some id -> match%lwt Select.video Conf.db_pool id with 
         | None -> Lwt.return None
-        | Some id -> match%lwt Select.video (module DB) id with 
-          | None -> Lwt.return None
-          | Some t -> Lwt.return (Some t)
-    end
+        | Some t -> Lwt.return (Some t)
 
   let get_video_id_by_media_ids media_ids =
-    Util.try_use_pool Conf.db_pool begin fun (module DB : DBC) ->
-      Select.video_id_by_media_ids (module DB) media_ids
-    end
+    Select.video_id_by_media_ids Conf.db_pool media_ids
 
   let gen_file_paths t =
     let canonical = Video.canonical t in
@@ -82,7 +78,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
       |> String.concat "/" in
     spf "%s/%s" Conf.files_path rel_path
 
-  let maybe_update_video_file_path (module DB : DBC) t new_t =
+  let maybe_update_video_file_path t new_t =
     let (_, rel_path, basename) = gen_file_paths new_t in 
     let ext = video_ext new_t in
     let filename = File.restrict_name_length basename ext in
@@ -97,13 +93,12 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
         = abs_path_of_uri (t |> Video.file_uri |> Bopt.get) in
       Lwt_unix.rename old_abs_path new_abs_path >>= fun () ->
       let vid_id = Video.id t |> Bopt.get in
-      Update.video_file_uri (module DB) vid_id new_uri >|= fun () ->
+      Update.video_file_uri Conf.db_pool vid_id new_uri >|= fun () ->
       { new_t with file_uri = Some (Uri.of_string new_uri) }
     else 
       Lwt.return t
 
-  let save_thumb_file (module DB : DBC)
-    ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
+  let save_thumb_file ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
   =
     let filename = File.restrict_name_length basename ext in
     let file_path = spf "%s/%s" abs_path filename in
@@ -120,11 +115,10 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
       e
     | Ok _ ->
       let local_path = make_local_uri rel_path filename in
-      Update.video_thumbnail_uri (module DB) vid_id local_path >|= fun () ->
+      Update.video_thumbnail_uri Conf.db_pool vid_id local_path >|= fun () ->
       Ok (Uri.of_string local_path)
 
-  let save_video_file (module DB : DBC)
-    ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
+  let save_video_file ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
   =
     let filename = File.restrict_name_length basename ext in
     let file_path = spf "%s/%s" abs_path filename in
@@ -144,10 +138,10 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     | Ok _ ->
       (* 10. update file_uri with local URI *)
       let local_path = make_local_uri rel_path filename in
-      Update.video_file_uri (module DB) vid_id local_path >>= fun () ->
+      Update.video_file_uri Conf.db_pool vid_id local_path >>= fun () ->
       (* 11. calculate file md5 and save to DB *)
       let md5 = File.md5 file_path in
-      Update.video_md5 (module DB) vid_id md5 >|= fun () ->
+      Update.video_md5 Conf.db_pool vid_id md5 >|= fun () ->
       let file_uri = Uri.of_string local_path in
       Ok (file_uri, md5)
 
@@ -162,11 +156,11 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     Lwt_unix.rename temp_path final_path >|= fun () ->
     final_uri
 
-  let save_new (module DB : DBC) t =
+  let save_new t =
     let media_id = media_id_of_video t in
 
     Log.debugf "[%s] Inserting into DB." media_id >>= fun () ->
-    Insert.video (module DB) t >>= fun t ->
+    Insert.video Conf.db_pool t >>= fun t ->
     let vid_id = Video.id t |> BatOption.get in
     Log.infof "[%s] Inserted as [%d]." media_id vid_id >>= fun () ->
 
@@ -185,7 +179,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
           let ext = thumb_ext t in
           Log.infof "[%s] Downloading thumbnail to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
-          save_thumb_file (module DB) ~vid_id ~media_id ~uri
+          save_thumb_file ~vid_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext 
           >|= function
           | Error _ -> t
@@ -200,7 +194,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
           let ext = video_ext t in
           Log.infof "[%s] Downloading video file to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
-          save_video_file (module DB) ~vid_id ~media_id ~uri
+          save_video_file ~vid_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext
           >|= function
           | Error _ -> t
@@ -218,9 +212,9 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
       File.unlink_if_exists @@ abs_path_of_uri old
     | _ -> Lwt.return ()
 
-  let save_existing (module DB : DBC) t_id new_t =
+  let save_existing t_id new_t =
     let new_t = Video.{ new_t with id = Some t_id } in
-    let%lwt old_t = match%lwt Select.video (module DB) t_id with
+    let%lwt old_t = match%lwt Select.video Conf.db_pool t_id with
     | None ->
       Log.errorf "[%s] Expected existing video with ID %d, but not found."
         (media_id_of_video new_t) t_id >>= fun () ->
@@ -253,7 +247,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     let media_id = media_id_of_video t in
 
     Log.debugf "[%s] Updating fields in DB." media_id >>= fun () ->
-    Update.video (module DB) t >>= fun t ->
+    Update.video Conf.db_pool t >>= fun t ->
 
     let abs_path, rel_path, basename = gen_file_paths new_t in
     File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
@@ -265,7 +259,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
         let ext = spf "%s.temp" (thumb_ext new_t) in
         Log.infof "[%s] Downloading thumbnail to [%s/%s.%s]"
           media_id rel_path basename ext >>= fun () ->
-        save_thumb_file (module DB) ~vid_id:t_id ~media_id ~uri
+        save_thumb_file ~vid_id:t_id ~media_id ~uri
                         ~abs_path ~rel_path ~basename ~ext 
         >>= function
         | Error _ -> Lwt.return t
@@ -273,7 +267,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
           Log.debugf "[%s] Moving thumbnail to permanent location." media_id
             >>= fun () ->
           let%lwt uri = move_temp_file uri in
-          Update.video_thumbnail_uri (module DB) t_id (Uri.to_string uri)
+          Update.video_thumbnail_uri Conf.db_pool t_id (Uri.to_string uri)
             >>= fun () ->
           (* Delete old image if it was named differently, otherwise it
               would have been replaced in the move .temp move. *)
@@ -290,12 +284,12 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
         if Video.md5 new_t = Video.md5 old_t
           && Video.file_uri old_t |> Bopt.map Uri.scheme
               = Some (Some local_scheme)
-        then maybe_update_video_file_path (module DB) t new_t
+        then maybe_update_video_file_path t new_t
         else
           let ext = spf "%s.temp" (video_ext new_t) in
           Log.infof "[%s] Downloading video to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
-          save_video_file (module DB) ~vid_id:t_id ~media_id ~uri
+          save_video_file ~vid_id:t_id ~media_id ~uri
                           ~abs_path ~rel_path ~basename ~ext
           >>= function
           | Error _ -> Lwt.return t
@@ -303,7 +297,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
             Log.debugf "[%s] Moving video to permanent location." media_id
               >>= fun () ->
             let%lwt uri = move_temp_file temp_uri in
-            Update.video_file_uri (module DB) t_id (Uri.to_string uri)
+            Update.video_file_uri Conf.db_pool t_id (Uri.to_string uri)
               >>= fun () ->
             rm_old_file_if_renamed ~old:(Video.file_uri old_t) ~new_:uri
               >|= fun () ->
@@ -312,7 +306,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     end >|= fun t ->
     t
 
-  let save' t (module DB : DBC) =
+  let save' t =
     let canonical = Video.canonical t in
     let media_id = media_id_of_video t in
 
@@ -320,17 +314,17 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     | Some vid_id -> 
       Log.infof "[%s] Already exists as [%d]. Updating."
         media_id vid_id >>= fun () ->
-      save_existing (module DB) vid_id t
+      save_existing vid_id t
 
     | None ->
       Log.debugf "[%s] Checking for existing video." media_id >>= fun () ->
-      let%lwt existing = Select.source (module DB)
+      let%lwt existing = Select.source Conf.db_pool
         ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
 
       begin match existing with
       | None | Some { id = None } ->
         Log.debugf "[%s] Saving as new video." media_id >>= fun () ->
-        save_new (module DB) t
+        save_new t
       | Some { id = Some src_id; video_id = None } ->
         (* Looks like the process was stopped after the source was created, 
           but before the video's inserted ID was saved to the source. Better
@@ -340,22 +334,22 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
           rows in other tables that reference it. *)
         Log.debugf "[%s] Source already exists as [%d]. Deleting before saving as new video"
           media_id src_id >>= fun () ->
-        Delete.source (module DB) src_id >>= fun () ->
-        save_new (module DB) t
+        Delete.source Conf.db_pool src_id >>= fun () ->
+        save_new t
       | Some { video_id = Some vid_id } ->
         Log.infof "[%s] Already exists as [%d]. Updating."
           media_id vid_id >>= fun () ->
-        save_existing (module DB) vid_id t
+        save_existing vid_id t
       end
-    end >>= fun t ->
+    end >|= fun t ->
 
-    Lwt.return t
+    t
   
   let save t = 
     let media_id = media_id_of_video t in
     Log.debugf "Saving [%s]." media_id >>= fun () ->
     
-    let%lwt t = try%lwt Util.try_use_pool Conf.db_pool (save' t) with
+    let%lwt t = try save' t with
     | exn ->
       Log.errorf ~exn "[%s] Failed saving." (media_id_of_video t) >>= fun () ->
       raise exn
