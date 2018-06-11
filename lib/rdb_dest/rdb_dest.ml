@@ -124,9 +124,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     let file_path = spf "%s/%s" abs_path filename in
     
     begin try%lwt File.save uri ~to_:file_path >|= fun () -> Ok () with
-    (* 9.b if file save fails, raise fatal error *)
     | File.File_error _ as exn -> raise exn
-    (* 9.a if download fail, warn and continue *)
     | exn ->
       Log.warnf ~exn "[%s] Failed saving video [%s] to [%s]"
         media_id (uri |> Uri.to_string) file_path >|= fun () ->
@@ -136,10 +134,8 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
       File.unlink_if_exists file_path >|= fun () ->
       e
     | Ok _ ->
-      (* 10. update file_uri with local URI *)
       let local_path = make_local_uri rel_path filename in
       Update.video_file_uri Conf.db_pool vid_id local_path >>= fun () ->
-      (* 11. calculate file md5 and save to DB *)
       let md5 = File.md5 file_path in
       Update.video_md5 Conf.db_pool vid_id md5 >|= fun () ->
       let file_uri = Uri.of_string local_path in
