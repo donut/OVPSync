@@ -54,7 +54,12 @@ let main () =
     let files_path = "/Users/donut/RTM/OVPSync/data/files"
   end) in
 
-  let module Synker = Sync.Make(JW_src)(Dest)(struct
+  let module Log_synker = Logger.Make(struct
+    let prefix = "Synker"
+    let level = `Trace
+  end) in
+
+  let module Synker = Sync.Make(JW_src)(Dest)(Log_synker)(struct
     type src_t = JW_src.t
     type dest_t = Dest.t
 
@@ -140,9 +145,19 @@ let main () =
         ; custom = source_custom }
       in
 
-      { Rdb_dest.Video. 
-        id = None
+      let%lwt id = 
+        let media_ids = ref [||] in
+        let append k v = media_ids := Array.append !media_ids [| k, v |] in
+        append ovp_name vid.key;
+        List.assoc_opt "Ooyala_content_ID" vid.custom >|? (append "ooyala")
+          |> ignore;
+        List.assoc_opt "OVPMigrate_ID" vid.custom >|? (append "ovp_migrate")
+          |> ignore;
+        Dest.get_video_id_by_media_ids (!media_ids |> Array.to_list)
+      in
 
+      { Rdb_dest.Video. 
+        id
       ; title = vid.title
       ; slug
 
@@ -168,6 +183,7 @@ let main () =
 
       ; canonical = source
       ; sources = [ source ] }
+      |> Lwt.return
 
     let should_sync (({ key; updated; md5 }, _, _) : src_t) =
       match%lwt Dest.get_video ~ovp:ovp_name ~media_id:key with

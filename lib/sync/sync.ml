@@ -31,7 +31,7 @@ module type Config = sig
   type src_t
   type dest_t
 
-  val dest_t_of_src_t : src_t -> dest_t
+  val dest_t_of_src_t : src_t -> dest_t Lwt.t
   val should_sync : (src_t -> bool Lwt.t)
 end
 
@@ -43,6 +43,7 @@ end
 
 module Make (Src : Source)
             (Dest : Destination)
+            (Log : Logger.Sig)
             (Conf : Config with type dest_t = Dest.t and type src_t = Src.t)
 : Synchronizer =
 struct
@@ -54,17 +55,21 @@ struct
        exceptions. *)
     let stop_flag = ref false in
     let stream = Src.make_stream ~should_sync:Conf.should_sync ~stop_flag in
-    stream |> Lwt_stream.iter_p (fun src_item ->
-      let dest_item = Conf.dest_t_of_src_t src_item in
-      begin try%lwt Dest.save dest_item >|= ignore with
-        | _ ->
-          (* [Dest.save] should report errors. We catch them here to be sure
-            clean up happens. *)
-          stop_flag := true;
-          Lwt.return ()
+    stream |> Lwt_stream.iter_s begin fun src_item ->
+      begin try%lwt
+        let%lwt dest_item = Conf.dest_t_of_src_t src_item in
+        Dest.save dest_item >|= ignore
+      with | exn ->
+        Log.fatal ~exn "Failed saving item to destination. STOPPING!"
+          >|= fun () ->
+        stop_flag := true;
+        ()
       end >>= fun () ->
       Src.cleanup src_item
     end >>= fun () ->
-    Src.final_cleanup ()
+
+    if !stop_flag 
+    then Lwt.return ()
+    else Src.final_cleanup ()
     
 end

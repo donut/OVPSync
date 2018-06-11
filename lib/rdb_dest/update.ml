@@ -127,15 +127,11 @@ let video (module DB : DBC) vid =
   | Some id -> id
   in
 
-  begin if Source.id canonical |> Bopt.is_none then
-    let str_id = Printf.sprintf "vid:%d ovp:%s media_id:%s"
-      vid_id (Source.name canonical) (Source.media_id canonical) in
-    raise @@ Missing_id ("video.canonical.id", str_id)
-  end;
-
   sources_of_video (module DB) vid >>= fun vid ->
 
-  Insert.new_tags_of (module DB) (Video.tags vid) >>= fun () ->
+  let Video.{ canonical; tags } = vid in
+
+  Insert.new_tags_of (module DB) tags >>= fun () ->
 
   let fields = Video.custom vid in
   let field_names = fields |> List.map fst in

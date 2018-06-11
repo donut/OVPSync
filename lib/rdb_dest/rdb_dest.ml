@@ -63,6 +63,11 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
           | Some t -> Lwt.return (Some t)
     end
 
+  let get_video_id_by_media_ids media_ids =
+    Util.try_use_pool Conf.db_pool begin fun (module DB : DBC) ->
+      Select.video_id_by_media_ids (module DB) media_ids
+    end
+
   let gen_file_paths t =
     let canonical = Video.canonical t in
     let rel = Source.added canonical |> File.dir_of_timestamp in
@@ -219,13 +224,27 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     | None -> raise Not_found
     | Some t -> Lwt.return t
     in
+
+    let canonical', sources' = 
+      let old_srcs = Video.sources old_t
+        |> List.filter (fun os ->
+          Bopt.is_none @@
+            List.find_opt (Source.are_same os) (Video.sources new_t)) in
+      let srcs = List.concat [old_srcs; Video.sources new_t] in
+      let old_c, new_c = Video.(canonical old_t, canonical new_t) in
+      let new_c = if Source.are_same old_c new_c
+                  then { new_c with id = old_c.id }
+                  else new_c in
+      new_c, srcs
+    in
     
     let t = Video.{ new_t with
       id = old_t.id;
       thumbnail_uri = old_t.thumbnail_uri;
       file_uri = old_t.file_uri;
       md5 = old_t.md5;
-      canonical = { new_t.canonical with id = old_t.canonical.id }
+      canonical = canonical';
+      sources = sources';
     } in
 
     let media_id = media_id_of_video t in

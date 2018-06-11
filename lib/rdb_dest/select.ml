@@ -158,3 +158,20 @@ let video (module DB : DBC) id =
       ; thumbnail_uri; description; tags; custom
       ; cms_id; link; canonical; sources }
     |> Lwt.return
+
+let video_id_by_media_ids (module DB : DBC) media_ids = 
+  let module D = Dynaparam in
+  let placeholder = "(name = ? AND media_id = ?)" in
+  let typ = Caqti_type.(tup2 string string) in
+  let (D.Pack (typs, values, plist)) = List.fold_left
+    (fun pack m -> D.add typ m placeholder pack)
+    D.empty media_ids in
+  let placeholders = String.concat " OR " plist in
+  let sql = Printf.sprintf 
+    "SELECT video_id FROM source \
+      WHERE video_id IS NOT NULL \
+        AND ( %s ) \
+      LIMIT 1"
+    placeholders in
+  let query = Caqti_request.find_opt ~oneshot:true typs Caqti_type.int sql in
+  DB.find_opt query values >>= Caqti_lwt.or_fail
