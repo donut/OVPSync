@@ -281,7 +281,8 @@ struct
     |> List.filter (fun ((_, { timestamp }) : string * Modified.t) ->
         (now - timestamp) > min_age)
     |> Lwt_list.iter_p (fun (media_id, changed) ->
-      cleanup_by_media_id media_id ~changed ())
+      try%lwt cleanup_by_media_id media_id ~changed () with
+      | exn -> Log.errorf ~exn "[%s] Failed cleaning up." media_id)
 
   let final_cleanup () = cleanup_old_changes ~exclude:[] ()
 

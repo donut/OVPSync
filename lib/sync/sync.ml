@@ -67,7 +67,8 @@ struct
         stop_flag := true;
         ()
       end >>= fun () ->
-      Src.cleanup src_item
+      try%lwt Src.cleanup src_item with
+      | exn -> Log.error ~exn "Failed cleaning up item."
     end >>= fun () ->
 
     if !stop_flag 
