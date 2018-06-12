@@ -55,7 +55,9 @@ struct
        exceptions. *)
     let stop_flag = ref false in
     let stream = Src.make_stream ~should_sync:Conf.should_sync ~stop_flag in
-    stream |> Lwt_stream.iter_p begin fun src_item ->
+    (* Limit the number of threads to avoid [Unix.EINVAL] exceptions.
+       @see https://github.com/ocsigen/lwt/issues/222 *)
+    stream |> Lwt_stream.iter_n ~max_threads:100 begin fun src_item ->
       begin try%lwt
         let%lwt dest_item = Conf.dest_t_of_src_t src_item in
         Dest.save dest_item >|= ignore
