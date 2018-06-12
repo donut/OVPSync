@@ -12,27 +12,29 @@ module Level = struct
     | `Trace ]
 
   let to_tup = function
-    | `Off   -> ( 0,   "off")
-    | `Fatal -> (10, "fatal")
-    | `Error -> (20, "error")
-    | `Warn  -> (30,  "warn")
-    | `Info  -> (40,  "info")
-    | `Debug -> (50, "debug")
-    | `Trace -> (60, "trace")
+    |   `Off -> ( 0,   "off", "🔳")
+    | `Fatal -> (10, "fatal", "🛑")
+    | `Error -> (20, "error", "❌")
+    |  `Warn -> (30,  "warn", "⚠️ ")
+    |  `Info -> (40,  "info", "ℹ️ ")
+    | `Debug -> (50, "debug", "♒️")
+    | `Trace -> (60, "trace", "🔎")
 
   let wrap_for = function
+    |   `Off -> "␀", "␀"
     | `Fatal -> "📛 ", "📛"
     | `Error -> "❗️ ", "❗"
-    |  `Warn -> "⚠️  ", " ⚠️"
+    |  `Warn -> "⚠️  ", "⚠️"
     |  `Info -> " •", "•"
     | `Debug -> "‹", "›"
     | `Trace -> "·", "·"
-    |   `Off -> "␀", "␀"
 
   let to_string t =
-    t |> to_tup |> snd
+    t |> to_tup |> BatTuple.Tuple3.second
   let to_int t =
-    t |> to_tup |> fst
+    t |> to_tup |> BatTuple.Tuple3.first
+  let to_symbol t = 
+    t |> to_tup |> BatTuple.Tuple3.third
   let compare a b =
     BatInt.compare (to_int a) (to_int b)
 end
@@ -72,9 +74,8 @@ module Make (Conf : Config) : Sig = struct
       Lwt.return ()
     else
       let datetime = datetime () in
-      let lvl = Level.to_string level in
-      let lw, rw = Level.wrap_for level in
-      Lwt_io.printlf "%s %s%s%s %s: %s" datetime lw lvl rw Conf.prefix message
+      let lvl = Level.to_symbol level in
+      Lwt_io.printlf "%s %s %s  %s" datetime Conf.prefix lvl message
 
   let logf (level : Level.t) fmt =
     ksprintf (log level) fmt
