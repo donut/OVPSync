@@ -53,6 +53,17 @@ let trim_slashes p =
   let ptrn = Re.Perl.compile_pat "^/+|/+$" in
   Re.replace_string ~all:true ptrn ~by:"" p
 
+let check_dir path =
+  let%lwt { st_kind; st_perm } = Lwt_unix.stat path in
+  if not (st_kind = Unix.S_DIR) then
+    (* @todo test with symbolic link to directory. Will [st_kind] be S_LNK
+              or still S_DIR. *)
+    raise @@ File_error (path, "is not a directory", "");
+  if st_perm < 0o700 then 
+    raise @@ File_error (path, "permissions less than 0700", "");
+  Lwt.return () 
+
+
 (** [prepare_dir ~prefix path] Creates all intermediate directories from
     [prefix] to [path], including [prefix]. *)
 let rec prepare_dir ~prefix path =
@@ -60,19 +71,16 @@ let rec prepare_dir ~prefix path =
   begin match%lwt Lwt_unix.file_exists prefix with 
   | false ->
     begin try%lwt Lwt_unix.mkdir prefix 0o775 with
+    | Unix.Unix_error(Unix.EEXIST, "mkdir", _) ->
+      (* Because several saves can be run in parallel, between checking if the
+         the dir exists and trying to create it, another LWT could have created
+         it. *)
+      check_dir prefix
     | exn ->
       let exn = Printexc.to_string exn in
       raise @@ File_error (prefix, "failed creating dir", exn)
     end
-  | true ->
-    let%lwt { st_kind; st_perm } = Lwt_unix.stat prefix in
-    if not (st_kind = Unix.S_DIR) then
-      (* @todo test with symbolic link to directory. Will [st_kind] be S_LNK
-               or still S_DIR. *)
-      raise @@ File_error (prefix, "is not a directory", None);
-    if st_perm < 0o700 then 
-      raise @@ File_error (prefix, "permissions less than 0700", None);
-    Lwt.return () 
+  | true -> check_dir prefix
   end >>= fun () ->
   match String.split_on_char '/' path with
   | [] | [""] -> Lwt.return prefix
