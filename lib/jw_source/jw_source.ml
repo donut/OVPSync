@@ -285,189 +285,189 @@ struct
 
   let final_cleanup () = cleanup_old_changes ~exclude:[] ()
 
-(* [make_stream should_sync] streams [t] until it has run through all of them. 
- * Note that it remembers the last offset and continues from there assuming
- * the [Variable_store] passed to [Make] is persistent.
- * 
- * JW does three things that complicate this process:
- *
- *   1) Original media files are unavailable by default, requiring a 
- *      "passthrough" conversion to be added, which is not an instant process.
- *      @see http://qa.jwplayer.com/~abussey/demos/general/access-originals.html
- * 
- *   2) The passthrough conversion counts against space usage.
- *
- *   3) Conversions of unpublished ("expired") media are inaccessible. 
- *
- * This means we need to prepare most media before returning it and then undo
- * any changes that we made. 
- *)
-let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
-  let current_videos_set = ref [] in
-  let videos_to_check = ref [] in
-  let processing_videos = ref [] in
+  (* [make_stream should_sync] streams [t] until it has run through all of them. 
+  * Note that it remembers the last offset and continues from there assuming
+  * the [Variable_store] passed to [Make] is persistent.
+  * 
+  * JW does three things that complicate this process:
+  *
+  *   1) Original media files are unavailable by default, requiring a 
+  *      "passthrough" conversion to be added, which is not an instant process.
+  *      @see http://qa.jwplayer.com/~abussey/demos/general/access-originals.html
+  * 
+  *   2) The passthrough conversion counts against space usage.
+  *
+  *   3) Conversions of unpublished ("expired") media are inaccessible. 
+  *
+  * This means we need to prepare most media before returning it and then undo
+  * any changes that we made. 
+  *)
+  let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
+    let current_videos_set = ref [] in
+    let videos_to_check = ref [] in
+    let processing_videos = ref [] in
 
-  let rec next () =
-    if !stop_flag then
-      Log.info "Stop flag set. Stopping sync." >>= fun () ->
-      Lwt.return None
-    else
+    let rec next () =
+      if !stop_flag then
+        Log.info "Stop flag set. Stopping sync." >>= fun () ->
+        Lwt.return None
+      else
 
-    begin match !videos_to_check, !processing_videos with
-    | [], [] ->
-      (* Check for new videos at the current offset in case more were 
-        * added (or some removed, pushing more into the current offset) in 
-        * the time it took to process the current set *)
-      let%lwt refreshed = match !current_videos_set with
-      (* First set, no need to refresh *)
-      | [] -> Lwt.return ([], []) 
-      (* Since [videos_to_check] and [processing_videos] are empty, we can
-       * assume that all videos in [current_videos_set] have been returned. *)
-      | returned -> refresh_current_videos_set ~returned
-      in
-
-      begin match refreshed with
-      | _, [] ->
-        Log.debug "Getting next set." >>= fun () ->
-        let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
-        let new_offset =
-          (offset |> int_of_string) + (List.length !current_videos_set) in
-        Var_store.set "request_offset" (new_offset |> string_of_int)
-          >>= fun () ->
-        Log.debugf "--> offset: %d" new_offset >>= fun () ->
-
-        let%lwt vids = get_set new_offset in
-
-        current_videos_set := vids;
-        videos_to_check := vids;
-        Log.infof "Got new set of %d videos at offset %d"
-          (List.length vids) new_offset >>= fun () ->
-
-        Log.debug "Cleaning up old changes." >>= fun () ->
-        let exclude = !videos_to_check
-          |> List.map (fun (v : videos_video) -> v.key)
+      begin match !videos_to_check, !processing_videos with
+      | [], [] ->
+        (* Check for new videos at the current offset in case more were 
+          * added (or some removed, pushing more into the current offset) in 
+          * the time it took to process the current set *)
+        let%lwt refreshed = match !current_videos_set with
+        (* First set, no need to refresh *)
+        | [] -> Lwt.return ([], []) 
+        (* Since [videos_to_check] and [processing_videos] are empty, we can
+        * assume that all videos in [current_videos_set] have been returned. *)
+        | returned -> refresh_current_videos_set ~returned
         in
-        cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
 
-      | refreshed_set, refreshed_to_check ->
-        Log.infof "Returned all vidoes in current set, but %d more were added at the current offset during that time. Processing those." 
+        begin match refreshed with
+        | _, [] ->
+          Log.debug "Getting next set." >>= fun () ->
+          let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
+          let new_offset =
+            (offset |> int_of_string) + (List.length !current_videos_set) in
+          Var_store.set "request_offset" (new_offset |> string_of_int)
+            >>= fun () ->
+          Log.debugf "--> offset: %d" new_offset >>= fun () ->
+
+          let%lwt vids = get_set new_offset in
+
+          current_videos_set := vids;
+          videos_to_check := vids;
+          Log.infof "Got new set of %d videos at offset %d"
+            (List.length vids) new_offset >>= fun () ->
+
+          Log.debug "Cleaning up old changes." >>= fun () ->
+          let exclude = !videos_to_check
+            |> List.map (fun (v : videos_video) -> v.key)
+          in
+          cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
+
+        | refreshed_set, refreshed_to_check ->
+          Log.infof "Returned all vidoes in current set, but %d more were added at the current offset during that time. Processing those." 
+            (List.length refreshed_to_check) >>= fun () ->
+          current_videos_set := refreshed_set;
+          videos_to_check := refreshed_to_check;
+          Lwt.return ()
+        end
+
+      | [], _ -> 
+        Log.debug "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again."
+          >>= fun () ->
+        (* Be sure we grab any updates that happened outside this program 
+          * during the last pass. *)
+        let returned = !current_videos_set
+          |> List.filter (fun (c : videos_video) ->
+            BatOption.is_none @@ List.find_opt
+              (fun (p : videos_video) -> p.key = c.key) !processing_videos)
+        in
+        let%lwt (refreshed_set, refreshed_to_check) =
+          refresh_current_videos_set ~returned
+        in
+
+        Log.infof "Checking on %d videos marked as processing."
           (List.length refreshed_to_check) >>= fun () ->
+
         current_videos_set := refreshed_set;
         videos_to_check := refreshed_to_check;
-        Lwt.return ()
-      end
+        processing_videos := [];
 
-    | [], _ -> 
-      Log.debug "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again."
-        >>= fun () ->
-      (* Be sure we grab any updates that happened outside this program 
-        * during the last pass. *)
-      let returned = !current_videos_set
-        |> List.filter (fun (c : videos_video) ->
-          BatOption.is_none @@ List.find_opt
-            (fun (p : videos_video) -> p.key = c.key) !processing_videos)
-      in
-      let%lwt (refreshed_set, refreshed_to_check) =
-        refresh_current_videos_set ~returned
-      in
+        sleep_if_few_left !videos_to_check 
 
-      Log.infof "Checking on %d videos marked as processing."
-        (List.length refreshed_to_check) >>= fun () ->
+      | _, _
+        -> Lwt.return ()
+      end >>= fun () ->
 
-      current_videos_set := refreshed_set;
-      videos_to_check := refreshed_to_check;
-      processing_videos := [];
+      match !videos_to_check with
+      | [] -> 
+        Log.info "Processed all videos at source." >>= fun () ->
+        Var_store.delete "request_offset" >>= fun () ->
+        Lwt.return None
 
-      sleep_if_few_left !videos_to_check 
+      | vid :: tl ->
+        Log.debugf "Checking [%s: %s]" vid.key vid.title >>= fun () ->
+        videos_to_check := tl;
 
-    | _, _
-      -> Lwt.return ()
-    end >>= fun () ->
+        let%lwt sync_needed = should_sync (vid, None, None) in
+        match sync_needed, vid.status, vid.sourcetype with
+        | false, _, _ ->
+          Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
+          next ()
 
-    match !videos_to_check with
-    | [] -> 
-      Log.info "Processed all videos at source." >>= fun () ->
-      Var_store.delete "request_offset" >>= fun () ->
-      Lwt.return None
-
-    | vid :: tl ->
-      Log.debugf "Checking [%s: %s]" vid.key vid.title >>= fun () ->
-      videos_to_check := tl;
-
-      let%lwt sync_needed = should_sync (vid, None, None) in
-      match sync_needed, vid.status, vid.sourcetype with
-      | false, _, _ ->
-        Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
-        next ()
-
-      | true, (`Created | `Processing | `Updating | `Failed), `File
-      | true, _, `URL ->
-        Log.infof "[%s] has URL source or non-ready status. RETURNING!"
-          vid.key >>= fun () ->
-        (* Since this program is designed to be run over and over again, 
-         * constantly syncing media from JW, we can catch anything that's
-         * processing the next time we reach this offset. *)
-        let file = BatOption.map (fun s -> (s, None, None)) vid.sourceurl in
-        let thumb = original_thumb_url vid.key in
-        Lwt.return (Some (vid, file, Some thumb))
-
-      | true, `Ready, `File ->
-        Log.debugf "[%s] Getting publish and passthrough status." vid.key
-          >>= fun () ->
-
-        match%lwt get_status_and_passthrough vid.key with
-        | true, Some { file; width; height } ->
-          Log.infof "[%s] Video is published and has passthrough. RETURNING!"
+        | true, (`Created | `Processing | `Updating | `Failed), `File
+        | true, _, `URL ->
+          Log.infof "[%s] has URL source or non-ready status. RETURNING!"
             vid.key >>= fun () ->
-          let%lwt vid = 
-            (* Make sure the returned video has the right expires_date,
-               since it may have been temporarily set to null so its files
-               could be downloaded. *)
-            let%lwt m = get_changed vid.key in
-            match m.expires with 
-            | None -> Lwt.return vid
-            | expires_date -> Lwt.return { vid with expires_date }
-          in
+          (* Since this program is designed to be run over and over again, 
+          * constantly syncing media from JW, we can catch anything that's
+          * processing the next time we reach this offset. *)
+          let file = BatOption.map (fun s -> (s, None, None)) vid.sourceurl in
           let thumb = original_thumb_url vid.key in
-          Lwt.return (Some (vid, Some (file, width, height), Some thumb))
+          Lwt.return (Some (vid, file, Some thumb))
 
-        | published, passthrough ->
-          match%lwt prepare_video_for_sync vid ~published ~passthrough with
-          | exception Not_found -> 
-            Log.infof "[%s] Looks like this video no longer exists. NEXT!"
+        | true, `Ready, `File ->
+          Log.debugf "[%s] Getting publish and passthrough status." vid.key
+            >>= fun () ->
+
+          match%lwt get_status_and_passthrough vid.key with
+          | true, Some { file; width; height } ->
+            Log.infof "[%s] Video is published and has passthrough. RETURNING!"
               vid.key >>= fun () ->
-            next ()
-          | () ->
-            Log.debugf "[%s] Adding to processing list. NEXT!" vid.key
-              >>= fun () ->
-            processing_videos := vid :: !processing_videos;
-            (* This video isn't ready to be returned yet, take at the next
-             * video in the list. This video will get looked at again once
-             * we've gone through every video in the current list to check. *)
-            next ()
+            let%lwt vid = 
+              (* Make sure the returned video has the right expires_date,
+                since it may have been temporarily set to null so its files
+                could be downloaded. *)
+              let%lwt m = get_changed vid.key in
+              match m.expires with 
+              | None -> Lwt.return vid
+              | expires_date -> Lwt.return { vid with expires_date }
+            in
+            let thumb = original_thumb_url vid.key in
+            Lwt.return (Some (vid, Some (file, width, height), Some thumb))
 
-  in
+          | published, passthrough ->
+            match%lwt prepare_video_for_sync vid ~published ~passthrough with
+            | exception Not_found -> 
+              Log.infof "[%s] Looks like this video no longer exists. NEXT!"
+                vid.key >>= fun () ->
+              next ()
+            | () ->
+              Log.debugf "[%s] Adding to processing list. NEXT!" vid.key
+                >>= fun () ->
+              processing_videos := vid :: !processing_videos;
+              (* This video isn't ready to be returned yet, take at the next
+              * video in the list. This video will get looked at again once
+              * we've gone through every video in the current list to check. *)
+              next ()
 
-  let rec try_next () =
-    try%lwt next () with
-    | Jw_client.Exn.Timeout (methd, uri) ->
-      Log.warnf "Request timed out: [%s %s]" methd uri >>= fun () ->
-      (* @todo Add method recover from timeout errors without completely
-               skipping the item. Probably need to wrap
-               [match !videos_to_check with ...] section with [try] *)
-      Lwt.return None
-    | Jw_client.Exn.Unexpected_response_status (status, headers, body) ->
-      Log.fatalf
-        "Unexpected HTTP response\n\
-          --> Status: %s\n\n\
-          --> Headers <--\n%s\n\n\
-          --> Body <--\n%s\n"
-        status headers body >>= fun () ->
-      Lwt.return None
-    | exn ->
-      Log.fatalf ~exn "Unexpected error" >>= fun () ->
-      Lwt.return None
-  in
+    in
 
-  Lwt_stream.from try_next
+    let rec try_next () =
+      try%lwt next () with
+      | Jw_client.Exn.Timeout (methd, uri) ->
+        Log.warnf "Request timed out: [%s %s]" methd uri >>= fun () ->
+        (* @todo Add method recover from timeout errors without completely
+                skipping the item. Probably need to wrap
+                [match !videos_to_check with ...] section with [try] *)
+        Lwt.return None
+      | Jw_client.Exn.Unexpected_response_status (status, headers, body) ->
+        Log.fatalf
+          "Unexpected HTTP response\n\
+            --> Status: %s\n\n\
+            --> Headers <--\n%s\n\n\
+            --> Body <--\n%s\n"
+          status headers body >>= fun () ->
+        Lwt.return None
+      | exn ->
+        Log.fatalf ~exn "Unexpected error" >>= fun () ->
+        Lwt.return None
+    in
+
+    Lwt_stream.from try_next
 end
