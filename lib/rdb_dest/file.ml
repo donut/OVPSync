@@ -9,7 +9,7 @@ let spf = Printf.sprintf
 let lplf fmt = Printf.ksprintf (Lwt_io.printl) fmt
 let plf fmt = Printf.ksprintf (print_endline) fmt
 
-exception File_error of string * string * exn option
+exception File_error of string * string * string
 exception Request_failure of string * string * exn
 exception Timeout of string * string
 exception Unexpected_response_status of string * string * string
@@ -60,7 +60,9 @@ let rec prepare_dir ~prefix path =
   begin match%lwt Lwt_unix.file_exists prefix with 
   | false ->
     begin try%lwt Lwt_unix.mkdir prefix 0o775 with
-    | exn -> raise @@ File_error (prefix, "failed creating dir", Some exn)
+    | exn ->
+      let exn = Printexc.to_string exn in
+      raise @@ File_error (prefix, "failed creating dir", exn)
     end
   | true ->
     let%lwt { st_kind; st_perm } = Lwt_unix.stat prefix in
@@ -138,7 +140,9 @@ let ext filename =
   let save src ~to_ =
     let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_TRUNC ]) in
     let%lwt file = try%lwt Lwt_unix.openfile to_ perms 0o664 with
-    | exn -> raise @@ File_error (to_, "Failed opening/creating file", Some exn)
+    | exn ->
+      let exn = Printexc.to_string exn in
+      raise @@ File_error (to_, "Failed opening/creating file", exn)
     in
     let fch = Lwt_io.of_fd ~mode:Output file in
     
