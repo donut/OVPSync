@@ -1,0 +1,9 @@
+
+type t = 
+    [ Off <json name="off">
+    | Fatal <json name="fatal">
+    | Error <json name="error">
+    | Warn <json name="warn">
+    | Info <json name="info">
+    | Debug <json name="debug">
+    | Trace <json name="trace"> ]

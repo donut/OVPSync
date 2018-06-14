@@ -1,0 +1,15 @@
+
+
+type log_level <ocaml from="Log_level" t="t"> = abstract
+type jw_client <ocaml from="Jw_client" t="t"> = abstract
+type jw_source <ocaml from="Jw_source" t="t"> = abstract
+type rdb_dest <ocaml from="Rdb_dest" t="t"> = abstract
+type sync <ocaml from="Sync" t="t"> = abstract
+
+type t =
+  { ?log_level_override : log_level option
+  ; db_conn : string
+  ; jw_client : jw_client
+  ; jw_source : jw_source
+  ; rdb_dest  : rdb_dest
+  ; sync : sync }

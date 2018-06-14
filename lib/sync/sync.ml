@@ -31,6 +31,7 @@ module type Config = sig
   type src_t
   type dest_t
 
+  val max_threads : int
   val dest_t_of_src_t : src_t -> dest_t Lwt.t
   val should_sync : (src_t -> bool Lwt.t)
 end
@@ -54,10 +55,11 @@ struct
        continue to iterate on the stream. This allows us to stop on 
        exceptions. *)
     let stop_flag = ref false in
-    let stream = Src.make_stream ~should_sync:Conf.should_sync ~stop_flag in
+    let should_sync, max_threads = Conf.(should_sync, max_threads) in
+    let stream = Src.make_stream ~should_sync ~stop_flag in
     (* Limit the number of threads to avoid [Unix.EINVAL] exceptions.
        @see https://github.com/ocsigen/lwt/issues/222 *)
-    stream |> Lwt_stream.iter_n ~max_threads:100 begin fun src_item ->
+    stream |> Lwt_stream.iter_n ~max_threads begin fun src_item ->
       begin try%lwt
         let%lwt dest_item = Conf.dest_t_of_src_t src_item in
         Dest.save dest_item >|= ignore

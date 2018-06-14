@@ -6,64 +6,73 @@ open Printf
 module Conf = Lib.Conf
 module Bopt = BatOption
 
+exception Caqti_conn_error of string
 
 let main () =
-  let conf = Conf.(JW_source.of_string @@ read_file "config.json") in
+  let conf = Conf.read_config "config.json" in
+  let get_log_level = Conf.log_level conf in
 
   Lwt_io.printl "Good morning, Starshine. The Earth says, \"Hello!\""
   >>= fun () ->
 
-  let db_uri = Uri.of_string "mariadb://ovp_sync:abc123@localhost/ovp_sync" in
-  Lwt.return @@ Caqti_lwt.connect_pool db_uri >>=
-  Caqti_lwt.or_fail >>= fun pool ->
+  let db_uri = Uri.of_string conf.db_conn in
+  let pool = match Caqti_lwt.connect_pool db_uri with
+  | Ok p -> p
+  | Error e -> raise @@ Caqti_conn_error (Caqti_error.show e)
+  in
 
   let module Log_jw_client = Logger.Make(struct
-    let prefix = "JWClient"
-    let level = `Trace
+    let prefix = conf.jw_client.log_namespace
+    let level = get_log_level conf.jw_client.log_level
   end) in
 
   let module JW = Jw_client.Platform.Make(Log_jw_client)(struct 
-    let key = Conf.JW_source.key conf
-    let secret = Conf.JW_source.secret conf
-    let rate_limit_to_leave = Conf.JW_source.rate_limit_to_leave conf
+    let key = conf.jw_client.key
+    let secret = conf.jw_client.secret
+    let rate_limit_to_leave = conf.jw_client.rate_limit_to_leave
   end) in
 
   let module JW_var_store = Variable_store.Make(struct
     let db_pool = pool
-    let namespace = "JWsrc-" ^ Conf.JW_source.key conf
+    let namespace = "JWsrc-" ^ conf.jw_client.key
   end) in
 
   let module Log_jw_src = Logger.Make(struct
-    let prefix = "Src"
-    let level = `Trace
+    let prefix = conf.jw_source.log_namespace
+    let level = get_log_level conf.jw_source.log_level
   end) in
 
   let module JW_src = Jw_source.Make(JW)(JW_var_store)(Log_jw_src)(struct
-    let params = ["result_limit", ["1000"]] 
-    let temp_pub_tag = "Temporarily Published"
-    let backup_expires_field = "ovp_sync.backup_expires_date"
+    let chunk_size = conf.jw_source.chunk_size |> string_of_int
+    
+    let params = ["result_limit", [chunk_size]] 
+    let temp_pub_tag = conf.jw_source.temp_publish_tag
+    (* let backup_expires_field =  *)
+    let backup_expires_field = conf.jw_source.backup_expires_field
   end) in
 
   let module Log_rdb_dest = Logger.Make(struct
-    let prefix = "Dest"
-    let level = `Trace
+    let prefix = conf.rdb_dest.log_namespace
+    let level = get_log_level conf.rdb_dest.log_level
   end) in
 
   let module Dest = Rdb_dest.Make(Log_rdb_dest)(struct
     let db_pool = pool
-    let files_path = "/Users/donut/RTM/OVPSync/data/files"
+    let files_path = conf.rdb_dest.files_path
   end) in
 
   let module Log_synker = Logger.Make(struct
-    let prefix = "Synker"
-    let level = `Trace
+    let prefix = conf.rdb_dest.log_namespace
+    let level = get_log_level conf.sync.log_level
   end) in
 
   let module Synker = Sync.Make(JW_src)(Dest)(Log_synker)(struct
     type src_t = JW_src.t
     type dest_t = Dest.t
 
-    let ovp_name = "jw-" ^ (Conf.JW_source.key conf)
+    let max_threads = conf.sync.max_threads
+
+    let ovp_name = "jw-" ^ conf.jw_client.key
 
     let dest_t_of_src_t ((vid, file', thumb) : src_t) =
       let slug = match BatList.assoc_opt "slug" vid.custom with

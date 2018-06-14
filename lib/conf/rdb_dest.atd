@@ -2,9 +2,6 @@
 type log_level <ocaml from="Log_level" t="t"> = abstract
 
 type t =
-  { chunk_size : int
-  ; temp_publish_tag : string
-  ; backup_expires_field : string
-
+  { files_path : string
   ; log_level : log_level
   ; log_namespace : string }

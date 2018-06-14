@@ -2,4 +2,5 @@
 
 (library
   ((name lib_conf)
-   (libraries (atdgen batteries))))
+   (libraries (atdgen batteries))
+  ))
