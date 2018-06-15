@@ -85,7 +85,7 @@ let main () =
       | None -> None, None, None 
       | Some (f, w, h) -> Some f, w, h
       in
-      let file_uri = BatOption.map Uri.of_string file in
+      let file_uri = file >|? Uri.of_string in
       let filename =
         BatList.assoc_opt "file_name" vid.custom |> BatOption.default slug in
       let duration_ptrn = Re.Perl.compile_pat "^(\\d+)(?:\\.(\\d{2}))?\\d*$" in
@@ -99,9 +99,7 @@ let main () =
       in
       let thumbnail_uri = thumb >|? Uri.of_string in
 
-      let tags = String.split_on_char ',' vid.tags
-        |> List.map String.trim
-      in
+      let tags = String.split_on_char ',' vid.tags |> List.map String.trim in
 
       let cms_id = BatList.assoc_opt "RTM_site_ID" vid.custom 
                    >|? ((^) "rightthisminute.com-")
@@ -184,7 +182,7 @@ let main () =
 
       ; thumbnail_uri
       ; description = vid.description
-      ; tags = tags
+      ; tags
       ; custom = vid.custom
 
       ; cms_id

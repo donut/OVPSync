@@ -1,5 +1,6 @@
 
 open Lwt.Infix
+open Lib.Infix
 open Printf
 
 module Bopt = BatOption
@@ -286,23 +287,44 @@ struct
 
   let final_cleanup () = cleanup_old_changes ~exclude:[] ()
 
+  (* [clear_temp_changes_for_return ?changed vid] Makes sure any changes to
+     [vid] that are just to facilitate the sync process are not actually
+     synced to the destination.  *)
+  let clear_temp_changes_for_return ?changed (vid : videos_video) =
+    let%lwt { expires } = match changed with 
+      | None -> get_changed vid.key
+      | Some c -> Lwt.return c 
+    in
+    
+    if Bopt.is_none expires then Lwt.return vid
+    else
+
+    let tags =
+      String.split_on_char ',' vid.tags
+      |> List.filter ((<>) Conf.temp_pub_tag)
+      |> String.concat ", " in   
+    let custom = 
+      List.filter ((fst %> (<>) Conf.backup_expires_field)) vid.custom in
+
+    Lwt.return { vid with expires_date=expires; tags; custom }
+
   (* [make_stream should_sync] streams [t] until it has run through all of them. 
-  * Note that it remembers the last offset and continues from there assuming
-  * the [Variable_store] passed to [Make] is persistent.
-  * 
-  * JW does three things that complicate this process:
-  *
-  *   1) Original media files are unavailable by default, requiring a 
-  *      "passthrough" conversion to be added, which is not an instant process.
-  *      @see http://qa.jwplayer.com/~abussey/demos/general/access-originals.html
-  * 
-  *   2) The passthrough conversion counts against space usage.
-  *
-  *   3) Conversions of unpublished ("expired") media are inaccessible. 
-  *
-  * This means we need to prepare most media before returning it and then undo
-  * any changes that we made. 
-  *)
+   * Note that it remembers the last offset and continues from there assuming
+   * the [Variable_store] passed to [Make] is persistent.
+   * 
+   * JW does three things that complicate this process:
+   *
+   *   1) Original media files are unavailable by default, requiring a 
+   *      "passthrough" conversion to be added, which is not an instant process.
+   *      @see http://qa.jwplayer.com/~abussey/demos/general/access-originals.html
+   * 
+   *   2) The passthrough conversion counts against space usage.
+   *
+   *   3) Conversions of unpublished ("expired") media are inaccessible. 
+   *
+   * This means we need to prepare most media before returning it and then undo
+   * any changes that we made. 
+   *)
   let make_stream ~(should_sync : (t -> bool Lwt.t)) ~stop_flag : t Lwt_stream.t =
     let current_videos_set = ref [] in
     let videos_to_check = ref [] in
@@ -395,10 +417,16 @@ struct
         Log.debugf "Checking [%s: %s]" vid.key vid.title >>= fun () ->
         videos_to_check := tl;
 
-        let%lwt sync_needed = should_sync (vid, None, None) in
+        let%lwt sync_needed =
+          let%lwt v = clear_temp_changes_for_return vid in
+          should_sync (v, None, None)
+        in
         match sync_needed, vid.status, vid.sourcetype with
         | false, _, _ ->
           Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
+          (* Just in case it was found not to need to be synced after changes
+             were made to it in prep for sync. *)
+          cleanup_by_media_id vid.key () >>= fun () ->
           next ()
 
         | true, (`Created | `Processing | `Updating | `Failed), `File
@@ -408,7 +436,8 @@ struct
           (* Since this program is designed to be run over and over again, 
           * constantly syncing media from JW, we can catch anything that's
           * processing the next time we reach this offset. *)
-          let file = BatOption.map (fun s -> (s, None, None)) vid.sourceurl in
+          let%lwt vid = clear_temp_changes_for_return vid in
+          let file = vid.sourceurl >|? (fun s -> (s, None, None)) in
           let thumb = original_thumb_url vid.key in
           Lwt.return (Some (vid, file, Some thumb))
 
@@ -420,15 +449,7 @@ struct
           | true, Some { file; width; height } ->
             Log.infof "[%s] Video is published and has passthrough. RETURNING!"
               vid.key >>= fun () ->
-            let%lwt vid = 
-              (* Make sure the returned video has the right expires_date,
-                since it may have been temporarily set to null so its files
-                could be downloaded. *)
-              let%lwt m = get_changed vid.key in
-              match m.expires with 
-              | None -> Lwt.return vid
-              | expires_date -> Lwt.return { vid with expires_date }
-            in
+            let%lwt vid = clear_temp_changes_for_return vid in
             let thumb = original_thumb_url vid.key in
             Lwt.return (Some (vid, Some (file, width, height), Some thumb))
 
