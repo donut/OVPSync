@@ -105,43 +105,46 @@ let main () =
                    >|? ((^) "rightthisminute.com-")
       in
 
-      let module Vid_j = Jw_client.Videos_video_j in
-      let author = match vid.author with
-        | None -> []
-        | Some a -> [ "author", a ]
-      in
-      let clean_j j =
-        let ptrn = Re.Perl.compile_pat "^<\"|\">$" in
-        Re.replace_string ~all:true ptrn ~by:"" j
-      in
-      let status =
-        [ "status", vid.status |> Vid_j.string_of_media_status |> clean_j ] in
-      let sourcetype =
-        [ "sourcetype", vid.sourcetype |> Vid_j.string_of_sourcetype
-                                       |> clean_j ] in
-      let mediatype =
-        [ "mediatype", vid.mediatype |> Vid_j.string_of_mediatype
-                                     |> clean_j ] in
-      let sourceformat = match vid.sourceformat with
-        | None -> []
-        | Some s ->
-          [ "sourceformat", s |> Vid_j.string_of_sourceformat |> clean_j ]
-      in
-      let size = [ "size", vid.size |> string_of_int ] in
-      let md5 = match vid.md5 with
-        | None -> []
-        | Some m -> [ "md5", m ]
-      in
-      let upload_session_id = match vid.upload_session_id with
-        | None -> []
-        | Some u -> [ "upload_session_id", u ]
-      in
-      let source_custom = 
-        [ author; status; sourcetype; mediatype; sourceformat;
-          size; md5; upload_session_id ]
-        |> List.concat
-      in
       let source = 
+        let module Vid_j = Jw_client.Videos_video_j in
+        let author = match vid.author with
+          | None -> []
+          | Some a -> [ "author", a ]
+        in
+        let clean_j j =
+          let ptrn = Re.Perl.compile_pat "^<\"|\">$" in
+          Re.replace_string ~all:true ptrn ~by:"" j
+        in
+        let status =
+          [ "status", vid.status |> Vid_j.string_of_media_status |> clean_j ] in
+        let sourcetype =
+          [ "sourcetype", vid.sourcetype |> Vid_j.string_of_sourcetype
+                                        |> clean_j ] in
+        let mediatype =
+          [ "mediatype", vid.mediatype |> Vid_j.string_of_mediatype
+                                      |> clean_j ] in
+        let sourceformat = match vid.sourceformat with
+          | None -> []
+          | Some s ->
+            [ "sourceformat", s |> Vid_j.string_of_sourceformat |> clean_j ]
+        in
+        let size = [ "size", vid.size |> string_of_int ] in
+        let md5 = match vid.md5 with
+          | None -> []
+          | Some m -> [ "md5", m ]
+        in
+        let upload_session_id = match vid.upload_session_id with
+          | None -> []
+          | Some u -> [ "upload_session_id", u ]
+        in
+        let file_uri = (file >|? (fun x -> [ "file_uri", x ])) =?: [] in
+        let thumb_uri = (thumb >|? (fun x -> [ "thumb_uri", x ])) =?: [] in
+        let source_custom = 
+          [ author; status; sourcetype; mediatype; sourceformat;
+            size; md5; upload_session_id; file_uri; thumb_uri ]
+          |> List.concat
+        in
+
         { Rdb_dest.Source. 
           id = None
         ; name =  ovp_name
@@ -192,15 +195,13 @@ let main () =
       ; sources = [ source ] }
       |> Lwt.return
 
-    let should_sync (({ key; updated; md5 }, _, _) : src_t) =
+    let should_sync src_item =
+      let ({ key; updated; md5 }, _, _) : src_t = src_item in
       match%lwt Dest.get_video ~ovp:ovp_name ~media_id:key with
       | None -> Lwt.return true
-      | Some vid ->
-        Lwt.return (
-          vid.canonical.modified <> updated
-          || vid.updated < updated
-          || vid.md5 <> md5
-        )
+      | Some old ->
+        let%lwt knew = dest_t_of_src_t src_item in
+        Lwt.return @@ Rdb_dest.Video.has_changed old knew
 
   end) in
 

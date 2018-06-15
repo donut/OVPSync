@@ -48,3 +48,9 @@ let collect_list pool query values =
 
 let find_opt pool query values =
   use_pool pool (fun (module DB : DBC) -> DB.find_opt query values)
+
+let fields_have_changed old knew =
+  let have_same () =
+    not @@ List.exists (fun x -> not @@ List.exists ((=) x) knew) old in
+  List.compare_lengths old knew <> 0
+  || not (have_same ())
