@@ -89,14 +89,17 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     (* Avoid using up the rate limit, leaving some for other applications *)
     let cnum = incr_call_count () in
     let now = Unix.time () in
-    begin if now < !rate_limit_reset
+    if now < !rate_limit_reset
         && !rate_limit_remaining <= Conf.rate_limit_to_leave then
       Log.infof "[%d] Leaving %d API hits; waiting %.0f seconds for reset."
         cnum !rate_limit_remaining (!rate_limit_reset -. now) >>= fun () ->
-      Lwt_unix.sleep (!rate_limit_reset -. now)
+      Lwt_unix.sleep (!rate_limit_reset -. now) >>= fun () ->
+      (* We call this function again to make sure the rate limit check is
+         performed again. Otherwise, it may just assume it can continue
+         and be wrong since there could be many other LWTs running requests
+         at the same time. *)
+      call path ~params ()
     else
-      Lwt.return () 
-    end >>= fun () ->
 
     let params' = merge_params (gen_required_params ()) params in
     let signed = sign_query params' in
