@@ -111,6 +111,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
       | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
         raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
       | exn ->
+        let exn = Printexc.to_string exn in
         raise @@ Exn.Request_failure ("GET", (Uri.to_string uri), exn)
     in
 
