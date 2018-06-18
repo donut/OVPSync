@@ -473,12 +473,14 @@ struct
     let rec try_next () =
       try%lwt next () with
       | Jw_client.Exn.Timeout (methd, uri) ->
+        stop_flag := true;
         Log.warnf "Request timed out: [%s %s]" methd uri >>= fun () ->
         (* @todo Add method recover from timeout errors without completely
                 skipping the item. Probably need to wrap
                 [match !videos_to_check with ...] section with [try] *)
         Lwt.return None
       | Jw_client.Exn.Unexpected_response_status (status, headers, body) ->
+        stop_flag := true;
         Log.fatalf
           "Unexpected HTTP response\n\
             --> Status: %s\n\n\
@@ -487,6 +489,7 @@ struct
           status headers body >>= fun () ->
         Lwt.return None
       | exn ->
+        stop_flag := true;
         Log.fatalf ~exn "Unexpected error" >>= fun () ->
         Lwt.return None
     in
