@@ -137,11 +137,9 @@ let main () =
           | None -> []
           | Some u -> [ "upload_session_id", u ]
         in
-        let file_uri = (file >|? (fun x -> [ "file_uri", x ])) =?: [] in
-        let thumb_uri = (thumb >|? (fun x -> [ "thumb_uri", x ])) =?: [] in
         let source_custom = 
           [ author; status; sourcetype; mediatype; sourceformat;
-            size; md5; upload_session_id; file_uri; thumb_uri ]
+            size; md5; upload_session_id ]
           |> List.concat
         in
 
@@ -201,7 +199,7 @@ let main () =
       | None -> Lwt.return true
       | Some old ->
         let%lwt knew = dest_t_of_src_t src_item in
-        Lwt.return @@ Rdb_dest.Video.has_changed old knew
+        Lwt.return @@ Rdb_dest.Video.has_changed ~old ~knew
 
   end) in
 

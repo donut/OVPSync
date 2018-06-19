@@ -135,7 +135,8 @@ let video pl id =
     let file_uri = Bopt.map Uri.of_string file in
     let filename = Uri.path (Bopt.default Uri.empty file_uri)
       |> String.split_on_char '/'
-      |> BatList.last in
+      |> BatList.last
+      |> Uri.pct_decode in
     let thumbnail_uri = Bopt.map Uri.of_string thumbnail in
 
     let%lwt tags = Util.collect_list pl Q.video_tags id in
