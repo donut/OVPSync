@@ -21,4 +21,4 @@ let has_changed old knew =
   else
 
   old.added <> knew.added
-  || Util.fields_have_changed old.custom knew.custom
+  || not (Util.items_are_same old.custom knew.custom)

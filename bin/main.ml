@@ -128,7 +128,6 @@ let main () =
           | Some s ->
             [ "sourceformat", s |> Vid_j.string_of_sourceformat |> clean_j ]
         in
-        let size = [ "size", vid.size |> string_of_int ] in
         let md5 = match vid.md5 with
           | None -> []
           | Some m -> [ "md5", m ]
@@ -137,9 +136,15 @@ let main () =
           | None -> []
           | Some u -> [ "upload_session_id", u ]
         in
+        (* [size] is left out since it is based on the total size of all 
+           conversions. This is not important metadata and changes without
+           anything else changing. Also, it changes when adding the passthrough
+           conversion which is necessary to sync, which means when it tries to
+           check if a sync is needed, it sees the size difference since the
+           passthrough conversion is removed after sync. *)
         let source_custom = 
           [ author; status; sourcetype; mediatype; sourceformat;
-            size; md5; upload_session_id ]
+            md5; upload_session_id ]
           |> List.concat
         in
 
@@ -194,12 +199,13 @@ let main () =
       |> Lwt.return
 
     let should_sync src_item =
-      let ({ key; updated; md5 }, _, _) : src_t = src_item in
+      let ({ key; updated; md5; sourcetype }, _, _) : src_t = src_item in
       match%lwt Dest.get_video ~ovp:ovp_name ~media_id:key with
       | None -> Lwt.return true
       | Some old ->
         let%lwt knew = dest_t_of_src_t src_item in
-        Lwt.return @@ Rdb_dest.Video.has_changed ~old ~knew
+        let check_md5 = sourcetype = `File in
+        Lwt.return @@ Rdb_dest.Video.has_changed ~check_md5 old knew
 
   end) in
 
