@@ -47,7 +47,9 @@ struct
   type accounts_template = Jw_client.Platform.accounts_templates_list_template
   type videos_video = Jw_client.Platform.videos_list_video
   type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
-  type t = videos_video * (string * int option * int option) option * string option
+  type t = videos_video
+         * (string * int option * int option) option
+         * string option
 
 
   let changed_video_key media_id = "video-changed-" ^ media_id
@@ -259,7 +261,9 @@ struct
     end >>= fun () ->
 
     clear_changed media_id >>= fun () ->
-    Log.infof "[%s] Undid all changes." media_id
+    if passthrough || Bopt.is_some expires
+    then Log.infof "[%s] Undid all changes." media_id
+    else Log.debugf "[%s] No changes to undo." media_id
 
 
   let cleanup ((vid, _, _) : t) = cleanup_by_media_id vid.key ()
