@@ -7,9 +7,22 @@ module Conf = Lib.Conf
 module Bopt = BatOption
 
 exception Caqti_conn_error of string
+exception Unexpected_arguments of string * string
 
 let main () =
-  let conf = Conf.read_config "config.json" in
+  let conf =
+    let path = match Sys.argv with
+      | [|_; path|] ->
+        Printf.printf "\nPath: %s\n" path;
+        path
+      | x ->
+        let args = Sys.argv |> Array.to_list |> String.concat "; " in
+        raise @@ Unexpected_arguments
+          ("The config path must be the only argument.", args)
+    in
+    Conf.read_config path
+  in
+
   let get_log_level = Conf.log_level conf in
 
   Lwt_io.printl "Good morning, Starshine. The Earth says, \"Hello!\""
