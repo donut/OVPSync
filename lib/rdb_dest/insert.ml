@@ -76,7 +76,7 @@ let new_tags_of pl lst =
    * small pool of tags but a large number of videos. *)
   let%lwt existing = Select.tags_by_name pl lst in
   let names = lst |> List.filter
-    (fun n -> not @@ List.exists (fun (_, n') -> n == n') existing) in
+    (fun n -> not @@ List.exists (snd %> ((=) n)) existing) in
   match List.length names with 
   | 0 -> Lwt.return ()
   | _ ->
