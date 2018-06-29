@@ -12,9 +12,7 @@ exception Unexpected_arguments of string * string
 let main () =
   let conf =
     let path = match Sys.argv with
-      | [|_; path|] ->
-        Printf.printf "\nPath: %s\n" path;
-        path
+      | [|_; path|] -> path
       | x ->
         let args = Sys.argv |> Array.to_list |> String.concat "; " in
         raise @@ Unexpected_arguments
@@ -100,7 +98,12 @@ let main () =
       in
       let file_uri = file >|? Uri.of_string in
       let filename =
-        BatList.assoc_opt "file_name" vid.custom |> BatOption.default slug in
+        let name = BatList.assoc_opt "file_name" vid.custom =?: slug in
+        (* Some names are just quotes, which isn't really desired. *)
+        let trim_quotes =
+          Re.replace_string (Re.Perl.compile_pat "^[\"']+$") ~by:"" in
+        if String.length (trim_quotes name) = 0 then vid.title else name 
+      in
       let duration_ptrn = Re.Perl.compile_pat "^(\\d+)(?:\\.(\\d{2}))?\\d*$" in
       let duration = match Re.exec_opt duration_ptrn vid.duration with
       | None -> None
