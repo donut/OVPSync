@@ -22,8 +22,7 @@ let get path ?(params=[]) () =
   | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
     raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
   | exn ->
-    let exn = Printexc.to_string exn in
-    raise @@ Exn.Request_failure ("GET", (Uri.to_string uri), exn)
+    raise @@ Exn.unknown_request_failure "GET" uri exn
 
 let get_media media_id ?params () =
   let path = "/media/" ^ media_id in

@@ -108,11 +108,10 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     let uri = Uri.of_string uri_str in
 
     let%lwt (resp, body) = try%lwt Clu.Client.get uri with
-      | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
+      | Unix.Unix_error (Unix.ETIMEDOUT, _, _) ->
         raise @@ Exn.Timeout ("GET", (Uri.to_string uri))
       | exn ->
-        let exn = Printexc.to_string exn in
-        raise @@ Exn.Request_failure ("GET", (Uri.to_string uri), exn)
+        raise @@ Exn.unknown_request_failure "GET" uri exn
     in
 
     let status = resp |> C.Response.status in
