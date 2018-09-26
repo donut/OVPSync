@@ -13,7 +13,7 @@
     {
       "label": "build",
       "type": "shell",
-      "command": "jbuilder build bin/main.exe",
+      "command": "dune build bin/main.exe",
       "dependsOn": [
         "atdgen"
       ],
