@@ -1,7 +1,4 @@
 
-open Lwt.Infix
-
-
 (** [merge_params la lb] merges the parameters of [lb] into [la], replacing
     the values of any keys that already exists. *)
 let merge_params la lb = 

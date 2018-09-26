@@ -64,7 +64,7 @@ end
 module Make (Conf : Config) : Sig = struct
   let datetime () =
     let { Unix.tm_year=yr; tm_mon=mon; tm_mday=day;
-          tm_hour=hr; tm_min=min; tm_sec=sec }
+          tm_hour=hr; tm_min=min; tm_sec=sec; _ }
       = Unix.time () |> Unix.localtime
     in
     sprintf "%4d/%02d/%02d %2d:%02d:%02d" (yr + 1900) (mon + 1) day hr min sec

@@ -1,6 +1,4 @@
 
-open Lwt.Infix
-
 module type DBC = Caqti_lwt.CONNECTION
 
 module Q = struct 

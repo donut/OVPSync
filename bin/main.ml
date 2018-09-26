@@ -13,7 +13,7 @@ let main () =
   let conf =
     let path = match Sys.argv with
       | [|_; path|] -> path
-      | x ->
+      | _ ->
         let args = Sys.argv |> Array.to_list |> String.concat "; " in
         raise @@ Unexpected_arguments
           ("The config path must be the only argument.", args)
@@ -215,7 +215,7 @@ let main () =
       |> Lwt.return
 
     let should_sync src_item =
-      let ({ key; updated; md5; sourcetype }, _, _) : src_t = src_item in
+      let ({ key; sourcetype; _ }, _, _) : src_t = src_item in
       match%lwt Dest.get_video ~ovp:ovp_name ~media_id:key with
       | None -> Lwt.return true
       | Some old ->

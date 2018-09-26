@@ -1,6 +1,4 @@
 
-open Lwt.Infix
-
 exception Request_failure of string * string * string
 exception Temprorary_error of string * string * string
 exception Timeout of string * string

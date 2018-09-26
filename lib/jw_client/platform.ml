@@ -143,7 +143,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     let%lwt (resp, body) = call path ?params () in
     begin match C.Response.status resp with
     | `OK -> Lwt.return ()
-    |   s ->
+    |   _ ->
       Exn.unexpected_response_status ~path ?params ~resp ~body () >>= raise
     end >>= fun () ->
     let%lwt body' = Clwt.Body.to_string body in
@@ -158,7 +158,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Videos_list_body_j.t_of_string body'
-    | s -> Exn.unexpected_response_status ~path ?params ~resp ~body () >>= raise
+    | _ -> Exn.unexpected_response_status ~path ?params ~resp ~body () >>= raise
 
   let videos_show media_id =
     let path, params = "/videos/show", [("video_key", [media_id])] in
@@ -168,7 +168,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     | `OK ->
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Some (Videos_show_body_j.t_of_string body')
-    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
+    | _ -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_update key params =
     let path = "/videos/update" in
@@ -178,7 +178,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     match C.Response.status resp with
     | `OK -> Lwt.return ()
     | `Not_found -> raise Not_found
-    |  s ->
+    |  _ ->
       Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_conversions_create media_id template_key =
@@ -192,7 +192,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     | `OK 
     | `Conflict (* already exists *) -> Lwt.return ()
     | `Not_found -> raise Not_found
-    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
+    | _ -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_conversions_list media_id =
     let path = "/videos/conversions/list" in
@@ -205,7 +205,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
       let%lwt body' = Clwt.Body.to_string body in
       Lwt.return @@ Videos_conversions_list_body_j.t_of_string body'
     | `Not_found -> raise Not_found
-    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
+    | _ -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let videos_conversions_delete key =
     let path, params =
@@ -214,7 +214,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     match C.Response.status resp with
     | `OK -> Lwt.return ()
     | `Not_found -> raise Not_found
-    | s -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
+    | _ -> Exn.unexpected_response_status ~path ~params ~resp ~body () >>= raise
 
   let create_conversion_by_name media_id template_name =
     let%lwt body = accounts_templates_list () in

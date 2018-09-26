@@ -1,7 +1,5 @@
 
 open Lwt.Infix
-open Printf
-open Util
 
 module C = Cohttp
 module Clwt = Cohttp_lwt

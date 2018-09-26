@@ -46,8 +46,6 @@ let media_id_of_video t =
   Video.canonical t |> Source.media_id
 
 module Make (Log : Logger.Sig) (Conf : Config) = struct
-  open Conf
-
   type t = Video.t
 
   (** [get_video ~ovp ~media_id] retrieves the video attached to the [ovp]  
@@ -318,10 +316,10 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
         ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
 
       begin match existing with
-      | None | Some { id = None } ->
+      | None | Some { id = None; _ } ->
         Log.debugf "[%s] Saving as new video." media_id >>= fun () ->
         save_new t
-      | Some { id = Some src_id; video_id = None } ->
+      | Some { id = Some src_id; video_id = None; _ } ->
         (* Looks like the process was stopped after the source was created, 
           but before the video's inserted ID was saved to the source. Better
           to just clear the slate and treat as new instead of handling all 
@@ -332,7 +330,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
           media_id src_id >>= fun () ->
         Delete.source Conf.db_pool src_id >>= fun () ->
         save_new t
-      | Some { video_id = Some vid_id } ->
+      | Some { video_id = Some vid_id; _ } ->
         Log.infof "[%s] Already exists as [%d]. Updating."
           media_id vid_id >>= fun () ->
         save_existing vid_id t

@@ -1,7 +1,4 @@
 
-open Lwt.Infix
-
-
 module Creq = Caqti_request
 open Caqti_type
 

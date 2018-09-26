@@ -46,7 +46,7 @@ let sanitize name =
 
 let dir_of_timestamp ts =
   let tm = Unix.gmtime (ts |> float_of_int) in
-  let { tm_year; tm_mon; tm_mday } : Unix.tm = tm in
+  let { tm_year; tm_mon; tm_mday; _ } : Unix.tm = tm in
   spf "%04d/%02d/%02d" (tm_year + 1900) (tm_mon + 1) tm_mday
 
 let trim_slashes p =
@@ -54,7 +54,7 @@ let trim_slashes p =
   Re.replace_string ~all:true ptrn ~by:"" p
 
 let check_dir path =
-  let%lwt { st_kind; st_perm } = Lwt_unix.stat path in
+  let%lwt { st_kind; st_perm; _ } = Lwt_unix.stat path in
   if not (st_kind = Unix.S_DIR) then
     (* @todo test with symbolic link to directory. Will [st_kind] be S_LNK
               or still S_DIR. *)
@@ -100,7 +100,7 @@ let ext filename =
       | Some _ -> None
       | None -> Some e
       end
-    | g ->
+    | _ ->
       None
 
   let basename filename = 

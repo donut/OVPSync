@@ -75,7 +75,7 @@ struct
       Conf.params
       [ "result_offset", [offset |> string_of_int] ]
     in
-    let%lwt { videos } = Client.videos_list ~params () in
+    let%lwt { videos; _ } = Client.videos_list ~params () in
     Lwt.return videos
 
 
@@ -95,7 +95,7 @@ struct
     let params = [("cache_break", [Random.bits () |> string_of_int])] in
 
     match%lwt Jw_client.Delivery.get_media media_id ~params () with
-    | Some { playlist = media :: _ } -> 
+    | Some { playlist = media :: _; _ } -> 
       let passthrough = media.sources |> List.find_opt begin fun s -> 
         let open Jw_client.V2_media_body_t in
         match s.label with
@@ -104,7 +104,7 @@ struct
       end in
       Lwt.return (true, passthrough)
 
-    | Some { playlist = [] } -> Lwt.return (true, None)
+    | Some { playlist = []; _ } -> Lwt.return (true, None)
     | None -> Lwt.return (false, None)
 
 
@@ -182,7 +182,7 @@ struct
     | Some _ -> Lwt.return ()
     | None ->
       begin if changes.passthrough then
-        let%lwt { conversions }
+        let%lwt { conversions; _ }
           = Client.videos_conversions_list vid.key
         in
         let passthrough = conversions
@@ -191,7 +191,7 @@ struct
         in
         match passthrough with
         | None -> Lwt.return true
-        | Some { status = `Failed; key } ->
+        | Some { status = `Failed; key; _ } ->
           (* @todo Deal with passthrough conversions that fail every time.
            *       This has the potential to infinitely loop. *)
           Log.errorf "[%s] Passthrough conversion creation failed"  
@@ -217,7 +217,7 @@ struct
 
   let cleanup_by_media_id media_id ?changed () =
     Log.debugf "Undoing changes to [%s]" media_id >>= fun () ->
-    let%lwt { expires; passthrough } = match changed with 
+    let%lwt { expires; passthrough; _ } = match changed with 
     | None -> get_changed media_id
     | Some c -> Lwt.return c 
     in
@@ -228,7 +228,7 @@ struct
       Log.debugf "[%s] Undoing publish" media_id >>= fun () ->
       match%lwt Client.videos_show media_id with
       | None -> Lwt.return ()
-      | Some { video } ->
+      | Some { video; _ } ->
         (* Make sure we have the latest expires date in case it was set
          * outside of this program. *)
         let expires_date' = match video.expires_date with
@@ -283,7 +283,7 @@ struct
       Bopt.is_none @@ List.find_opt ((=) media_id) exclude)
     |> List.map (fun (media_id, changes) ->
       (media_id, Modified.of_string changes))
-    |> List.filter (fun ((_, { timestamp }) : string * Modified.t) ->
+    |> List.filter (fun ((_, { timestamp; _ }) : string * Modified.t) ->
         (now - timestamp) > min_age)
     |> Lwt_list.iter_p (fun (media_id, changed) ->
       try%lwt cleanup_by_media_id media_id ~changed () with
@@ -295,7 +295,7 @@ struct
      [vid] that are just to facilitate the sync process are not actually
      synced to the destination.  *)
   let clear_temp_changes_for_return ?changed (vid : videos_video) =
-    let%lwt { expires } = match changed with 
+    let%lwt { expires; _ } = match changed with 
       | None -> get_changed vid.key
       | Some c -> Lwt.return c 
     in
@@ -450,7 +450,7 @@ struct
             >>= fun () ->
 
           match%lwt get_status_and_passthrough vid.key with
-          | true, Some { file; width; height } ->
+          | true, Some { file; width; height; _ } ->
             Log.infof "[%s] Video is published and has passthrough. RETURNING!"
               vid.key >>= fun () ->
             let%lwt vid = clear_temp_changes_for_return vid in

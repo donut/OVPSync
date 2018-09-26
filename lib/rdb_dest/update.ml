@@ -128,7 +128,7 @@ let video pl vid =
 
   sources_of_video pl vid >>= fun vid ->
 
-  let Video.{ canonical; tags } = vid in
+  let Video.{ canonical; tags; _ } = vid in
 
   Insert.new_tags_of pl tags >>= fun () ->
 
