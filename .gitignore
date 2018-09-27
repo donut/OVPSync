@@ -80,3 +80,4 @@ config.json
 
 # Generated
 /data
+/_opam
