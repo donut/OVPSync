@@ -1,0 +1,30 @@
+opam-version: "2.0"
+name: "OVPSync"
+version: "~dev"
+synopsis: "A library for syncing arbitrary data between a source and a destination"
+maintainer: "Donovan Mueller <donovan.mueller@rightthismiute.com>"
+authors: "Donovan Mueller <zotobi@gmail.com>"
+license: "MIT"
+homepage: "https://github.com/RightThisMinute/OVPSync"
+bug-reports: "https://github.com/RightThisMinute/OVPSync/issues"
+depends: [
+  "atdgen" {>= "1.13.0"}
+  "batteries" {>= "2.8.0"}
+  "caqti" {>= "0.10.2"}
+  "caqti-driver-mariadb" {>= "0.10.2"}
+  "caqti-dynload" {>= "0.10.2"}
+  "caqti-lwt" {>= "0.10.2"}
+  "cohttp-lwt-unix" {>= "1.0.2"}
+  "dune" {>= "1.1.1"}
+  "lwt" {>= "3.3.0"}
+  "lwt_ppx" {>= "1.2.0"}
+  "lwt_ssl" {>= "1.1.2"}
+  "sha" {>= "1.12"}
+  "tls" {>= "0.9.1"}
+]
+build: [make "build"]
+install: [make "install"]
+dev-repo: "git+https://github.com/RightThisMinute/OVPSync.git"
+url {
+  src: "git+https://github.com/RightThisMinute/OVPSync.git#master"
+}
