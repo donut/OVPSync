@@ -4,5 +4,5 @@
   ((name rdb_dest)
    (libraries (lib logger sync
                batteries caqti caqti-dynload caqti-lwt cohttp.lwt lwt re uri))
-   (preprocess (pps (ppx_fields_conv lwt.ppx)))
+   (preprocess (pps (ppx_fields_conv lwt_ppx)))
   ))

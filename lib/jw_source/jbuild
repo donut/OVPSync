@@ -4,5 +4,5 @@
   ((name jw_source)
    (libraries (jw_client logger sync
                batteries lwt))
-   (preprocess (pps (ppx_sexp_conv lwt.ppx)))
+   (preprocess (pps (ppx_sexp_conv lwt_ppx)))
   ))

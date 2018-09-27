@@ -55,11 +55,11 @@ struct
        continue to iterate on the stream. This allows us to stop on 
        exceptions. *)
     let stop_flag = ref false in
-    let should_sync, max_threads = Conf.(should_sync, max_threads) in
+    let should_sync, max_concurrency = Conf.(should_sync, max_threads) in
     let stream = Src.make_stream ~should_sync ~stop_flag in
     (* Limit the number of threads to avoid [Unix.EINVAL] exceptions.
        @see https://github.com/ocsigen/lwt/issues/222 *)
-    stream |> Lwt_stream.iter_n ~max_threads begin fun src_item ->
+    stream |> Lwt_stream.iter_n ~max_concurrency begin fun src_item ->
       begin try%lwt
         let%lwt dest_item = Conf.dest_t_of_src_t src_item in
         Dest.save dest_item >|= ignore
