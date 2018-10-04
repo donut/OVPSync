@@ -30,7 +30,7 @@ let x_fields_not_named pl x x_id names =
   let sql = Printf.sprintf
     "DELETE FROM %s_field WHERE %s_id = ? AND name NOT IN (%s)"
     x_name x_name placeholders in
-  let query = Caqti_request.exec typ sql in
+  let query = Caqti_request.exec ~oneshot:true typ sql in
   Util.exec pl query vals
 
 let source_fields_not_named pl src_id names =

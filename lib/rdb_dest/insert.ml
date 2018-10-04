@@ -86,7 +86,7 @@ let new_tags_of pl lst =
     let sql = Printf.sprintf
       "INSERT INTO tag (name) VALUES %s ON DUPLICATE KEY UPDATE id=id"
       (String.concat ", " placeholders) in
-    let query = Caqti_request.exec typ sql in
+    let query = Caqti_request.exec ~oneshot:true typ sql in
     Util.exec pl query values
 
 let video_tag_relations pl video_id tag_ids =
@@ -98,7 +98,7 @@ let video_tag_relations pl video_id tag_ids =
   let sql = Printf.sprintf
     "INSERT INTO video_tag (video_id, tag_id) VALUES %s"
     (String.concat ", " placeholders) in
-  let query = Caqti_request.exec typ sql in
+  let query = Caqti_request.exec ~oneshot:true typ sql in
   Util.exec pl query values
 
 let video_fields pl video_id fields =

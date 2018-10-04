@@ -64,7 +64,7 @@ let or_insert_x_fields pl x x_id fields =
     "INSERT INTO %s_field (%s_id, name, value) VALUES %s \
      ON DUPLICATE KEY UPDATE value = VALUES(value)"
     x_name x_name placeholders in
-  let query = Caqti_request.exec typ sql in
+  let query = Caqti_request.exec ~oneshot:true typ sql in
   Util.exec pl query vals
 
 let or_insert_source_fields pl src_id fields =
