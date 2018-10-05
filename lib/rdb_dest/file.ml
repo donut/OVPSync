@@ -114,13 +114,18 @@ let ext filename =
   let restrict_name_length base ext =
     let name = spf "%s.%s" base ext in
     let length = String.length name in
-    if length <= max_name_length then 
-      name
+
+    if length <= max_name_length then name
     else
-      (* [-3] for the --- to show that it was shortened
-         [-1] for the . separating the basename and extension *)
-      let sub = String.sub base 0 (max_name_length - 4) in
-      spf "%s---.%s" sub ext
+
+    let new_length = 
+      max_name_length
+      - 3 (* for the --- to show that it was shortened *)
+      - 1 (* for the . separating the basename and extension *)
+      - String.length ext
+    in
+    let sub = String.sub base 0 new_length in
+    spf "%s---.%s" sub ext
 
   (** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
       redirects. *)
