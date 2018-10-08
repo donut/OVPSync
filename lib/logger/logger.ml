@@ -15,17 +15,17 @@ module Level = struct
     |   `Off -> ( 0,   "off", "🔳")
     | `Fatal -> (10, "fatal", "🛑")
     | `Error -> (20, "error", "❌")
-    |  `Warn -> (30,  "warn", "⚠️ ")
-    |  `Info -> (40,  "info", "ℹ️ ")
+    |  `Warn -> (30,  "warn", "⚠️")
+    |  `Info -> (40,  "info", "ℹ️")
     | `Debug -> (50, "debug", "♒️")
     | `Trace -> (60, "trace", "🔎")
 
   let wrap_for = function
     |   `Off -> "␀", "␀"
-    | `Fatal -> "📛 ", "📛"
-    | `Error -> "❗️ ", "❗"
-    |  `Warn -> "⚠️  ", "⚠️"
-    |  `Info -> " •", "•"
+    | `Fatal -> "📛", "📛"
+    | `Error -> "❗️", "❗"
+    |  `Warn -> "⚠️", "⚠️"
+    |  `Info -> "•", "•"
     | `Debug -> "‹", "›"
     | `Trace -> "·", "·"
 
