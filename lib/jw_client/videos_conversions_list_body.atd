@@ -27,6 +27,11 @@ type link = {
   path : string;
 }
 
+type error = {
+  message : string;
+  id : int;
+}
+
 type conversion = {
   key : string;
   mediatype : mediatype;
@@ -36,7 +41,7 @@ type conversion = {
   width : int;
   height : int;
   template : template;
-  ?error : string option;
+  ?error : error option;
   ?link : link option;
 }
 
