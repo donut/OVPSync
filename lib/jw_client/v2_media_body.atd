@@ -24,7 +24,7 @@ type media = {
 
   ?image: string option;
   sources : source list;
-  tracks : track list;
+  ~tracks <ocaml default="[]"> : track list;
   duration : int;
 }
 
