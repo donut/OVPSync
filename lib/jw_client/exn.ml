@@ -1,6 +1,6 @@
 
 exception Request_failure of string * string * string
-exception Temprorary_error of string * string * string
+exception Temporary_error of string * string * string
 exception Timeout of string * string
 exception Unexpected_response_status of string * string * string
 
@@ -16,7 +16,7 @@ let unknown_request_failure meth uri exn =
   let ptrn = Re.Perl.compile_pat "name resolution failed" in
   match Re.exec_opt ptrn exn with
   | None -> Request_failure (meth, (Uri.to_string uri), exn)
-  | Some _ -> Temprorary_error (meth, (Uri.to_string uri), exn)
+  | Some _ -> Temporary_error (meth, (Uri.to_string uri), exn)
 
 let unexpected_response_status ?(meth="GET") ?(params=[]) ~path ~resp ~body () =
   let request =

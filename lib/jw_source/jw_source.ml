@@ -492,7 +492,7 @@ struct
             --> Body <--\n%s\n"
           status headers body >>= fun () ->
         Lwt.return None
-      | Jw_client.Exn.Temprorary_error (meth, uri, exn) ->
+      | Jw_client.Exn.Temporary_error (meth, uri, exn) ->
         Log.warnf "Temporary error making a %s request to [%s]: %s"
           meth uri exn >>= fun () ->
         try_next ()
