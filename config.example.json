@@ -42,8 +42,8 @@
     // @see https://github.com/ocsigen/lwt/issues/222
     // 100 seems be safe. Tried 300, but that caused problems.
     "max_threads" : 100
+    // Once finished syncing, start again.
+  , "loop_infinitely" : true
   , "log_level" : "info"
   , "log_namespace" : "Sync" }
-}
-
 }

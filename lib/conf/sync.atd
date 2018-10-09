@@ -3,5 +3,6 @@ type log_level <ocaml from="Log_level" t="t"> = abstract
 
 type t =
   { max_threads : int
+  ; loop_infinitely : bool
   ; log_level : log_level
   ; log_namespace : string }

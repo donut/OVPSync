@@ -32,6 +32,7 @@ module type Config = sig
   type dest_t
 
   val max_threads : int
+  val loop_infinitely : bool
   val dest_t_of_src_t : src_t -> dest_t Lwt.t
   val should_sync : (src_t -> bool Lwt.t)
 end
@@ -48,7 +49,7 @@ module Make (Src : Source)
             (Conf : Config with type dest_t = Dest.t and type src_t = Src.t)
 : Synchronizer =
 struct
-  let sync () = 
+  let rec sync () = 
     (* This stop flag instructs the stream to stop streaming early.
        When using the [_p] (parallelized) variant of [Lwt_stream.iter], 
        exceptions raised in the passed function will be ignored and it will 
@@ -73,8 +74,19 @@ struct
       | exn -> Log.error ~exn "Failed cleaning up item."
     end >>= fun () ->
 
-    if !stop_flag 
-    then Lwt.return ()
-    else Src.final_cleanup ()
+    if !stop_flag then Lwt.return ()
+    else
     
+    Src.final_cleanup () >>= fun () ->
+    
+    Log.info
+      ( "\n###############################\n"
+      ^   "         FINISHED RUN          \n"
+      ^   "###############################" )
+    >>= fun () ->
+
+    if Conf.loop_infinitely 
+    then sync ()
+    else Lwt.return ()
+
 end

@@ -82,6 +82,7 @@ let main () =
     type dest_t = Dest.t
 
     let max_threads = conf.sync.max_threads
+    let loop_infinitely = conf.sync.loop_infinitely
 
     let ovp_name = "jw-" ^ conf.jw_client.key
 
