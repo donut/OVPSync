@@ -312,6 +312,16 @@ struct
 
     Lwt.return { vid with expires_date=expires; tags; custom }
 
+  let log_request_failures = function
+    | [] -> Lwt.return ()
+    | lst -> 
+      lst
+      |> List.map
+        (fun (meth, url, err) -> sprintf "--> %s [%s %s]" err meth url)
+      |> String.concat "\n"
+      |> Log.warnf "Enountered temporary request errors:\n%s"
+
+
   (* [make_stream should_sync] streams [t] until it has run through all of them. 
    * Note that it remembers the last offset and continues from there assuming
    * the [Variable_store] passed to [Make] is persistent.
@@ -333,10 +343,16 @@ struct
     let current_videos_set = ref [] in
     let videos_to_check = ref [] in
     let processing_videos = ref [] in
+    (* Keep track of requests that fail for likely temporary reasons to be
+       reported just before finishing sync. Since failed requests lead to
+       skipping to the next item, we want to log these in case the user
+       wants to follow up on the items that were not synced. *)
+    let failed_requests = ref [] in
 
     let rec next () =
       if !stop_flag then
         Log.info "Stop flag set. Stopping sync." >>= fun () ->
+        log_request_failures !failed_requests >>= fun () ->
         Lwt.return None
       else
 
@@ -413,6 +429,7 @@ struct
 
       match !videos_to_check with
       | [] -> 
+        log_request_failures !failed_requests >>= fun () ->
         Log.info "Processed all videos at source." >>= fun () ->
         Var_store.delete "request_offset" >>= fun () ->
         Lwt.return None
@@ -476,13 +493,14 @@ struct
 
     let rec try_next () =
       try%lwt next () with
-      | Jw_client.Exn.Timeout (methd, uri) ->
+      | Jw_client.Exn.Timeout (meth, uri) ->
         stop_flag := true;
-        Log.warnf "Request timed out: [%s %s]" methd uri >>= fun () ->
-        (* @todo Add method recover from timeout errors without completely
+        Log.warnf "Request timed out: [%s %s]" meth uri >>= fun () ->
+        (* @todo Add method to recover from timeout errors without completely
                 skipping the item. Probably need to wrap
                 [match !videos_to_check with ...] section with [try] *)
-        Lwt.return None
+        failed_requests := (meth, uri, "timed out") :: !failed_requests;
+        try_next ()
       | Jw_client.Exn.Unexpected_response_status (status, headers, body) ->
         stop_flag := true;
         Log.fatalf
@@ -491,14 +509,17 @@ struct
             --> Headers <--\n%s\n\n\
             --> Body <--\n%s\n"
           status headers body >>= fun () ->
+        log_request_failures !failed_requests >>= fun () ->
         Lwt.return None
       | Jw_client.Exn.Temporary_error (meth, uri, exn) ->
-        Log.warnf "Temporary error making a %s request to [%s]: %s"
+        Log.warnf "Temporary error making request [%s %s]: %s"
           meth uri exn >>= fun () ->
+        failed_requests := (meth, uri, exn) :: !failed_requests;
         try_next ()
       | exn ->
         stop_flag := true;
         Log.fatalf ~exn "Unexpected error" >>= fun () ->
+        log_request_failures !failed_requests >>= fun () ->
         Lwt.return None
     in
 
