@@ -102,15 +102,20 @@ let video_tag_relations pl video_id tag_ids =
   Util.exec pl query values
 
 let video_fields pl video_id fields =
+  if BatList.is_empty fields then Lwt.return ()
+  else
+
   let module D = Dynaparam in
   let (D.Pack (typ, values, placeholders)) = List.fold_left
     (fun pk (n, v) ->
       D.add Caqti_type.(tup3 int string string) (video_id, n, v) "(?, ?, ?)" pk)
     D.empty fields in
+
   let placeholders = String.concat ", " placeholders in
   let sql = Printf.sprintf
     "INSERT INTO video_field (video_id, name, value) VALUES %s" placeholders in
   let query = Caqti_request.exec ~oneshot:true typ sql in
+
   Util.exec pl query values
 
 let video pl vid =
