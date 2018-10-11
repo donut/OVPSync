@@ -4,6 +4,7 @@ open Lib.Infix
 open Printf
 
 module Conf = Lib.Conf
+module Blist = BatList
 module Bopt = BatOption
 
 exception Caqti_conn_error of string
@@ -87,10 +88,10 @@ let main () =
     let ovp_name = "jw-" ^ conf.jw_client.key
 
     let dest_t_of_src_t ((vid, file', thumb) : src_t) =
-      let slug = match BatList.assoc_opt "slug" vid.custom with
+      let slug = match Blist.assoc_opt "slug" vid.custom with
       | Some s -> s
       | None ->
-        BatList.assoc_opt "file_name" vid.custom |> BatOption.default vid.title
+        Blist.assoc_opt "file_name" vid.custom |> BatOption.default vid.title
       in
 
       let file, width, height = match file' with
@@ -99,7 +100,7 @@ let main () =
       in
       let file_uri = file >|? Uri.of_string in
       let filename =
-        let name = BatList.assoc_opt "file_name" vid.custom =?: slug in
+        let name = Blist.assoc_opt "file_name" vid.custom =?: slug in
         (* Some names are just quotes, which isn't really desired. *)
         let trim_quotes =
           Re.replace_string (Re.Perl.compile_pat "^[\"']+$") ~by:"" in
@@ -118,7 +119,7 @@ let main () =
 
       let tags = String.split_on_char ',' vid.tags |> List.map String.trim in
 
-      let cms_id = BatList.assoc_opt "RTM_site_ID" vid.custom 
+      let cms_id = Blist.assoc_opt "RTM_site_ID" vid.custom 
                    >|? ((^) "rightthisminute.com-")
       in
 
