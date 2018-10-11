@@ -6,6 +6,7 @@ open Printf
 module Conf = Lib.Conf
 module Blist = BatList
 module Bopt = BatOption
+module Bstr = BatString
 
 exception Caqti_conn_error of string
 exception Unexpected_arguments of string * string
@@ -187,6 +188,28 @@ let main () =
         Dest.get_video_id_by_media_ids (!media_ids |> Array.to_list)
       in
 
+      (* Make custom field names case insensitively unqiue. JW uses case 
+         sensitive comparisons, but the video_field.value column in the DB
+         uses an insensitive collation. Thinking about future compatibility,
+         and possibily working with other systems, it seems like it'd be better
+         to store the values in a way that is most likely to be compatible. *)
+      let custom = 
+        let rec uniquify ?(num=0) ?base keys key =
+          let low_k = Bstr.lowercase key in
+          if List.exists ((=) low_k) keys then
+            let base = base =?: key in
+            let k = sprintf "%s_%d" base num in
+            uniquify ~num:(num + 1) ~base keys k
+          else
+            key
+        in
+        vid.custom |> List.fold_left begin fun (keys, lst) (k, v) ->
+          let key = uniquify keys k in
+          let low_k = Bstr.lowercase key in
+          (low_k :: keys, (key, v) :: lst)
+        end ([], []) |> snd
+      in
+
       { Rdb_dest.Video. 
         id
       ; title = vid.title
@@ -207,7 +230,7 @@ let main () =
       ; thumbnail_uri
       ; description = vid.description
       ; tags
-      ; custom = vid.custom
+      ; custom
 
       ; cms_id
       ; link = vid.link >|? Uri.of_string
