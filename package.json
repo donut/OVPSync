@@ -1,0 +1,35 @@
+{
+  "name": "ovpsync",
+  "version": "0.0.1",
+  "description":
+    "A library for syncing arbitrary data between a source and a destination",
+  "repository": "https://github.com/RightThisMinute/OVPSync",
+  "author": "Donovan Mueller",
+  "license": "MIT",
+  "private": false,
+  "esy": { "build": "refmterr dune build bin/main.exe" },
+  "scripts": { "doc": "esy dune build @doc" },
+  "dependencies": {
+    "@opam/atdgen": "2.0.0",
+    "@opam/batteries": "2.9.0",
+    "@opam/caqti": "1.1.0",
+    "@opam/caqti-driver-mariadb": "1.1.0",
+    "@opam/caqti-lwt": "1.0.0",
+    "@opam/cohttp": "2.0.0",
+    "@opam/cohttp-lwt": "2.0.0",
+    "@opam/cohttp-lwt-unix": "2.0.0",
+    "@opam/dune": "*",
+    "@opam/lwt": "4.2.1",
+    "@opam/lwt_ppx": "1.2.2",
+    "@opam/lwt_ssl": "1.1.2",
+    "@opam/sha": "1.12",
+    "@opam/tls": "0.10.2",
+    "ocaml": "~4.7.0",
+    "refmterr": "*"
+  },
+  "devDependencies": {
+    "@opam/merlin": "*",
+    "ocaml": "~4.7.0",
+    "@opam/odoc": "*"
+  }
+}

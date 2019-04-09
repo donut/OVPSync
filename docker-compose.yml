@@ -1,0 +1,13 @@
+version: '3.6'
+
+services:
+  dev:
+    image: com.rightthisminute.services.ads-txt.dev
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        TZ: ${TZ:?TZ unset. Please define timezone in .env file.}
+        ESY_IMAGE: ${ESY_IMAGE:?ESY_IMAGE unset. Use `make` instead.}
+    volumes:
+      - ./:/app

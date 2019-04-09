@@ -2,4 +2,4 @@
 
 (library
   ((name variable_store)
-   (libraries (batteries caqti caqti-dynload caqti-lwt lwt))))
+   (libraries (batteries caqti caqti-driver-mariadb caqti-lwt lwt))))
