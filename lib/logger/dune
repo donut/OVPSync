@@ -1,0 +1,3 @@
+(library
+ (name logger)
+ (libraries batteries lwt lwt.unix))

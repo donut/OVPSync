@@ -1,0 +1,3 @@
+(library
+ (name variable_store)
+ (libraries batteries caqti caqti-driver-mariadb caqti-lwt lwt))
