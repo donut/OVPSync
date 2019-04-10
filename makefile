@@ -73,25 +73,27 @@ esy: .env
 _esy: esy
 	./esy install
 
+atd_t_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_t.ml"; done | paste -sd " " -)
+atd_j_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_j.ml"; done | paste -sd " " -)
+atd_ml_files = $(atd_t_ml_files) $(atd_j_ml_files)
+
 lib/%_t.ml: _esy
-	$(MAKE) t_ml-of-atd
+	$(MAKE) ml-of-atd
 
-lib/%_j.ml: _esy
-	$(MAKE) j_ml-of-atd
+lib/%_j.ml: $(atd_t_ml_files)
 
-_esy/default/build/default/bin/main.exe: esy lib/%_t.ml lib/%_j.ml
+_esy/default/build/default/bin/main.exe: _esy esy $(atd_ml_files)
 	./esy
 
-.PHONY: t_ml-of-atd
-t_ml-of-atd:
-	$(dc) exec dev find . -iname '*.atd' -exec esy atdgen -t '{}' ';' 
-
-.PHONY: j_ml-of-atd
-j_ml-of-atd:
-	$(dc) exec dev find . -iname '*.atd' -exec esy atdgen -j '{}' ';' 
-
 .PHONY: ml-of-atd
-ml-of-atd: t_ml-of-atd j_ml-of-atd
+ml-of-atd: 
+	$(dc) exec dev find . -type f -name '*.atd' \
+		-exec esy atdgen -t '{}' ';'  \
+		-exec esy atdgen -j '{}' ';' 
+
+.PHONY: clean-ml-of-atd
+clean-ml-of-atd:
+	find -E bin lib -type f -iregex '.*\_[tj].mli?' -exec rm '{}' ';'
 
 .PHONY: rebuild
 rebuild: _esy esy
