@@ -1,7 +1,5 @@
 include esy-docker.mk
 
-env = ESY_IMAGE=$(shell cat $$(pwd)/.docker/image.esy)
-
 OS := $(shell uname)
 ifeq ($(OS), Linux)
 	dc = sudo docker-compose
@@ -13,13 +11,14 @@ else
 	xargs-seperator = -0
 endif
 
-.env: .docker/image.esy
-	echo $(env) > .env
-	echo "TZ=$${TZ:-America/Phoenix}" >> .env
+_env/docker-compose.env:
+	@echo "### Environment config not setup. ###"
+	@echo "Take a look at _env/README for instructions."
+	@exit 1
 
-.PHONY: docker-compose
-docker-compose:
-	$(dc) $(a)
+.env: .docker/image.esy _env/docker-compose.env
+	echo "ESY_IMAGE=$(shell cat .docker/image.esy)" > .env
+	cat _env/docker-compose.env >> .env
 
 .docker/image.dev: .env
 	$(dc) up --detach dev
@@ -102,7 +101,8 @@ rebuild: _esy esy
 
 .PHONY: run
 run: _esy/default/build/default/bin/main.exe
-	$(dc) exec dev /app/_esy/default/build/default/bin/main.exe /app/config.json
+	$(dc) exec dev /app/_esy/default/build/default/bin/main.exe \
+		/app/_env/config.json
 
 # Build and run main.exe
 .PHONY: brun

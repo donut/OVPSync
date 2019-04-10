@@ -2,12 +2,28 @@ version: '3.6'
 
 services:
   dev:
-    image: com.rightthisminute.services.ads-txt.dev
     build: 
       context: .
       dockerfile: Dockerfile.dev
       args:
-        TZ: ${TZ:?TZ unset. Please define timezone in .env file.}
-        ESY_IMAGE: ${ESY_IMAGE:?ESY_IMAGE unset. Use `make` instead.}
+        TZ: ${TZ:?TZ unset. Use `make .env`.}
+        ESY_IMAGE: ${ESY_IMAGE:?ESY_IMAGE unset. Use `make .env`.}
     volumes:
       - ./:/app
+      - ./_data/app:/data
+
+  db: 
+    build:
+      context: ./docker/db
+      args: [ TZ ]
+    restart: always
+    ports: [ "3306" ]
+    environment:
+      - MYSQL_ROOT_PASSWORD
+      - MYSQL_DATABASE
+      - MYSQL_USER
+      - MYSQL_PASSWORD
+    volumes:
+      - ./_data/db/data:/var/lib/mysql
+      - ./docker/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./_env/mysql-dump.sql:/docker-entrypoint-initdb.d/002-dump.sql:ro

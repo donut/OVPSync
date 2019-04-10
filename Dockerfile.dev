@@ -1,10 +1,10 @@
-
 ARG ESY_IMAGE
 FROM $ESY_IMAGE as esy
 
 # Niceties
 RUN apk add --no-cache fish vim
 
+# Timezone
 # See https://serverfault.com/q/683605/54523
 ARG TZ
 RUN apk add --no-cache tzdata
@@ -20,4 +20,4 @@ RUN apk add --no-cache mariadb-dev
 RUN mkdir /app
 WORKDIR /app
 
-ENTRYPOINT ["top"]
+ENTRYPOINT ["tail", "-f", "/dev/null"]
