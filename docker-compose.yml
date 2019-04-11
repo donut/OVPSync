@@ -1,16 +1,19 @@
 version: '3.6'
 
 services:
-  dev:
+  app:
     build: 
       context: .
-      dockerfile: Dockerfile.dev
       args:
         TZ: ${TZ:?TZ unset. Use `make .env`.}
-        ESY_IMAGE: ${ESY_IMAGE:?ESY_IMAGE unset. Use `make .env`.}
+      # Use docker-compose.override.yml to target the `development` environment.
+      target: production
     volumes:
-      - ./:/app
-      - ./_data/app:/data
+      - ./docker/app/entrypoint.sh:/app/entrypoint.sh
+      - ./_env/config.json:/app/_env/config.json:ro
+      - ./_data/app:/app/_data
+    depends_on:
+      - db
 
   db: 
     build:

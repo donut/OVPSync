@@ -1,0 +1,17 @@
+# Suggested docker-compose.override.yml settings for development.
+# Copy this file to docker-compose.override.yml and run `make docker-images`
+# and then `make start` to begin with development.
+version: '3.6'
+
+services:
+  app:
+    build: 
+      target: development
+    volumes:
+      - ./bin:/app/bin
+      - ./lib:/app/lib
+      - ./dune-project:/app/dune-project
+      - ./esy.lock:/app/esy.lock
+      - ./package.json:/app/package.json
+      - ./_env/config.json:/app/_env/config.json:ro
+      - ./_data/app:/app/_data
