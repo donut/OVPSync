@@ -81,10 +81,6 @@ clean-docker-deeply:
 clean-data:
 	rm -rf _data
 
-.PHONY: clean-esy-build
-clean-esy-build:
-	$(su-rm) -rf _esy
-
 
 .PHONY: shell
 shell: .env
@@ -103,21 +99,26 @@ esy: .env
 	@$(call EMIT,$(ESY_FOR_HOST)) > $(@)
 	@chmod +x $(@)
 
-_esy: esy
+
+_esy/default: esy
 	./esy install
+
+.PHONY: clean-esy-build
+clean-esy-build: .env
+	$(su-rm) -rf _esy/*
 
 
 atd_t_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_t.ml"; done | paste -sd " " -)
 atd_j_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_j.ml"; done | paste -sd " " -)
 atd_ml_files = $(atd_t_ml_files) $(atd_j_ml_files)
 
-lib/%_t.ml: _esy
+lib/%_t.ml: _esy/default
 	$(MAKE) ml-of-atd
 
 lib/%_j.ml: $(atd_t_ml_files)
 
 .PHONY: ml-of-atd
-ml-of-atd: 
+ml-of-atd: _esy/default
 	$(dc) exec app find . -type f -name '*.atd' \
 		-exec esy atdgen -t '{}' ';' \
 		-exec esy atdgen -j '{}' ';' 
@@ -127,11 +128,14 @@ clean-ml-of-atd:
 	find -E bin lib -type f -iregex '.*\_[tj].mli?' -exec rm '{}' ';'
 
 
-_esy/default/build/default/bin/main.exe: _esy esy $(atd_ml_files)
+_esy/default/build/default/bin/main.exe: esy _esy/default $(atd_ml_files)
 	./esy
 
+.PHONY: main.exe
+main.exe: _esy/default/build/default/bin/main.exe
+
 .PHONY: rebuild
-rebuild: _esy esy
+rebuild: _esy/default esy
 	$(MAKE) ml-of-atd
 	./esy
 

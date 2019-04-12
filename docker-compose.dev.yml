@@ -13,5 +13,6 @@ services:
       - ./dune-project:/app/dune-project
       - ./esy.lock:/app/esy.lock
       - ./package.json:/app/package.json
+      - ./_esy:/app/_esy
       - ./_env/config.json:/app/_env/config.json:ro
       - ./_data/app:/app/_data
