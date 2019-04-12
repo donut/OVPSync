@@ -1,6 +1,6 @@
 # Suggested docker-compose.override.yml settings for development.
 # Copy this file to docker-compose.override.yml and run `make docker-images`
-# and then `make start` to begin with development.
+# and then `make start` to begin with development. You could also symlink it.
 version: '3.6'
 
 services:
