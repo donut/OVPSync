@@ -7,14 +7,18 @@ _esy:
 clean-esy-build: 
 	rm -rf _esy
 
+
 atd_t_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_t.ml"; done | paste -sd " " -)
 atd_j_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_j.ml"; done | paste -sd " " -)
 atd_ml_files = $(atd_t_ml_files) $(atd_j_ml_files)
 
 lib/%_t.ml: _esy
-	$(MAKE) -s ml-of-atd
+	$(eval atd_file := $(shell echo -n "$$(expr "$@" : '\(.*\)\_[tj].ml').atd"))
+	esy atdgen -t $(atd_file)
 
-lib/%_j.ml: $(atd_t_ml_files)
+lib/%_j.ml: _esy
+	$(eval atd_file := $(shell echo -n "$$(expr "$@" : '\(.*\)\_[tj].ml').atd"))
+	esy atdgen -j $(atd_file)
 
 .PHONY: ml-of-atd
 ml-of-atd: _esy
