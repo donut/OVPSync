@@ -18,7 +18,7 @@
     "@opam/cohttp": "2.0.0",
     "@opam/cohttp-lwt": "2.0.0",
     "@opam/cohttp-lwt-unix": "2.0.0",
-    "@opam/dune": "~1.6.0",
+    "@opam/dune": "~1.9.0",
     "@opam/lwt": "4.2.1",
     "@opam/lwt_ppx": "1.2.2",
     "@opam/lwt_ssl": "1.1.2",
