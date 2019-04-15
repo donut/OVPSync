@@ -39,7 +39,7 @@ main.exe: _esy/default/build/default/bin/main.exe
 
 .PHONY: rebuild
 rebuild: _esy
-	$(MAKE) ml-of-atd
+	$(MAKE) -s ml-of-atd
 	esy
 
 .PHONY: run
