@@ -24,7 +24,7 @@ ml-of-atd: _esy
 
 .PHONY: clean-ml-of-atd
 clean-ml-of-atd:
-	find -E bin lib -type f -iregex '.*\_[tj].mli?' -exec rm '{}' ';'
+	find bin lib -type f -regex '.*\_[tj].mli\?' -exec rm '{}' ';'
 
 
 _esy/default/build/default/bin/main.exe: _esy $(atd_ml_files)
