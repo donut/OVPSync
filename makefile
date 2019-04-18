@@ -134,3 +134,8 @@ run: .env
 # Build and run main.exe
 .PHONY: brun
 brun: rebuild run
+
+
+.PHONY: follow-db-logs
+follow-db-logs: .env
+	$(dc) exec db sh -c "tail -f /var/log/mysql/*.log"

@@ -22,3 +22,7 @@ services:
 
   db: 
     ports: [ "3306:3306" ]
+    # Uncomment below to enable detailed logging for debugging purposes.
+    # Use the `make follow-db-logs` command to follow the relevant logs.
+    # volumes:
+    #   - ./docker/db/debug-mode.cnf:/etc/mysql/conf.d/zzz-debug-mode.cnf
