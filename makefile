@@ -102,8 +102,6 @@ esy: .env
 
 app-make = $(dc) exec --workdir=/app app make
 
-_esy: esy
-	esy install
 
 .PHONY: clean-esy-build
 clean-esy-build: .env
