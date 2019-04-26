@@ -18,7 +18,6 @@ services:
 
       # Required for running app
       - ./_env/config.json:/app/_env/config.json:ro
-      - ./_data/app:/app/_data
 
   db: 
     ports: [ "3306:3306" ]
