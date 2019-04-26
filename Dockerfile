@@ -77,14 +77,17 @@ RUN make main.exe
 
 
 ### Production ###
-FROM alpine:3.9 as production
+FROM ubuntu:bionic as production
 
-# Needed for @esy-ocaml/libffi@3.2.10
-RUN apk add --no-cache texinfo
-# Needed for @opam/tls
-RUN apk add --no-cache gmp-dev
-# Need for @opam/caqti-driver-mariadb
-RUN apk add --no-cache mariadb-dev
+RUN apt-get update && apt-get install --assume-yes \
+  # Needed for @opam/caqti-driver-mariadb
+  libmariadb-dev \
+  # Needed for @esy-ocaml/libffi@3.2.10
+  texinfo \
+  # Needed for /app/entrypoint.sh
+  netcat \
+  # Clean up
+  && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /app
 COPY --from=app-build /app/_esy/default/build/default /app
