@@ -5,7 +5,7 @@
 
 echo "Checking that MariaDB is up on db service."
 until $(nc -zv db 3306); do
-  printf '.'
+  echo "...MariaDB not available yet."
   sleep 5
 done
 
