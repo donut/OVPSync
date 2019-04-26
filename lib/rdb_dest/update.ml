@@ -51,7 +51,8 @@ module Q = struct
 
 end
 
-let or_insert_x_fields pl x x_id fields =
+
+let or_insert_x_fields dbc x x_id fields =
   let x_name = match x with `Source -> "source" | `Video -> "video" in
   let module D = Dynaparam in
   let (D.Pack (typ, vals, placeholders)) = List.fold_left 
@@ -65,23 +66,25 @@ let or_insert_x_fields pl x x_id fields =
      ON DUPLICATE KEY UPDATE value = VALUES(value)"
     x_name x_name placeholders in
   let query = Caqti_request.exec ~oneshot:true typ sql in
-  Util.exec pl query vals
 
-let or_insert_source_fields pl src_id fields =
-  or_insert_x_fields pl `Source src_id fields
+  Util.exec dbc query vals
 
-let or_insert_source pl src =
+
+let or_insert_source_fields dbc src_id fields =
+  or_insert_x_fields dbc `Source src_id fields
+
+let or_insert_source dbc src =
   let added_ts = Source.added src |> Util.ptime_of_int in
   let modified_ts = Source.modified src |> Util.ptime_of_int in
   let values =
     Source.(name src, media_id src, video_id src, (added_ts, modified_ts)) in
-  Util.exec pl Q.or_insert_source values >>= fun () ->
+  Util.exec dbc Q.or_insert_source values >>= fun () ->
 
   let%lwt id = match Source.id src with
   | Some id -> Lwt.return id
   | None ->
     let name, media_id = Source.(name src, media_id src) in
-    begin match%lwt Select.source_id pl ~name ~media_id with
+    begin match%lwt Select.source_id dbc ~name ~media_id with
     | None ->
       let id = Printf.sprintf "ovp:%s media_id:%s" name media_id in
       raise (Util.Row_not_found id)
@@ -91,13 +94,13 @@ let or_insert_source pl src =
   
   let fields = Source.custom src in 
   let field_names = List.map fst fields in
-  Delete.source_fields_not_named pl id field_names >>= fun () ->
+  Delete.source_fields_not_named dbc id field_names >>= fun () ->
 
-  or_insert_source_fields pl id fields >>= fun () ->
+  or_insert_source_fields dbc id fields >>= fun () ->
 
   Lwt.return { src with id = Some id }
 
-let sources_of_video pl vid =
+let sources_of_video dbc vid =
   let canonical = Video.canonical vid in
   let is_canonical = Source.are_same canonical in
   let sources = 
@@ -107,15 +110,15 @@ let sources_of_video pl vid =
     |> List.map (fun s -> Source.({ s with video_id = (Video.id vid) }))
   in
   (* [or_insert_sources] will add IDs if an INSERT was performed. *)
-  Lwt_list.map_s (or_insert_source pl) sources >>= fun sources ->
+  let%lwt sources = Lwt_list.map_s (or_insert_source dbc) sources in
 
   let canonical = List.find is_canonical sources in
   Lwt.return { vid with canonical; sources }
 
-let or_insert_video_fields pl vid_id fields =
-  or_insert_x_fields pl `Video vid_id fields
+let or_insert_video_fields dbc vid_id fields =
+  or_insert_x_fields dbc `Video vid_id fields
 
-let video pl vid =
+let video dbc vid =
   let canonical = Video.canonical vid in
 
   let vid_id = match Video.id vid with
@@ -126,16 +129,16 @@ let video pl vid =
   | Some id -> id
   in
 
-  sources_of_video pl vid >>= fun vid ->
+  let%lwt vid = sources_of_video dbc vid in
 
   let Video.{ canonical; tags; _ } = vid in
 
-  Insert.new_tags_of pl tags >>= fun () ->
+  Insert.new_tags_of dbc tags >>= fun () ->
 
   let fields = Video.custom vid in
   let field_names = fields |> List.map fst in
-  Delete.video_fields_not_named pl vid_id field_names >>= fun () ->
-  or_insert_video_fields pl vid_id fields >>= fun () ->
+  Delete.video_fields_not_named dbc vid_id field_names >>= fun () ->
+  or_insert_video_fields dbc vid_id fields >>= fun () ->
 
   let publish_ts = Video.publish vid |> Util.ptime_of_int in
   let expires_ts = Video.expires vid |> Bopt.map Util.ptime_of_int in
@@ -143,7 +146,7 @@ let video pl vid =
   let file_str = Video.file_uri vid |> Bopt.map Uri.to_string in
   let thumb_str = Video.thumbnail_uri vid |> Bopt.map Uri.to_string in
   let link_str = Video.link vid |> Bopt.map Uri.to_string in
-  Util.exec pl Q.video
+  Util.exec dbc Q.video
     Video.( (title vid, slug vid, publish_ts)
           , (expires_ts, file_str, md5 vid, width vid)
           , (height vid, duration vid, thumb_str, description vid)
@@ -152,11 +155,12 @@ let video pl vid =
 
   Lwt.return vid
 
-let video_thumbnail_uri pl vid_id uri =
-  Util.exec pl Q.video_thumbnail_uri (uri, vid_id)
 
-let video_file_uri pl vid_id uri =
-  Util.exec pl Q.video_file_uri (uri, vid_id)
+let video_thumbnail_uri dbc vid_id uri =
+  Util.exec dbc Q.video_thumbnail_uri (uri, vid_id)
 
-let video_md5 pl vid_id md5 =
-  Util.exec pl Q.video_md5 (md5, vid_id)
+let video_file_uri dbc vid_id uri =
+  Util.exec dbc Q.video_file_uri (uri, vid_id)
+
+let video_md5 dbc vid_id md5 =
+  Util.exec dbc Q.video_md5 (md5, vid_id)

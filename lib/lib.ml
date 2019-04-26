@@ -11,6 +11,16 @@ module Infix = struct
       that will accept [x] and pass it to [l], passing the result of that to 
       [r]. *)
   let ( %> ) l r x = x |> l |> r
+
+  (** [l $@ r] takes the function [l] and returns a new function that will
+      accept [x], passing it to [l] as the first argument and [r] as the 
+      second. *)
+  let ( $@ ) l r x = l x r
+
+  (** [l & r] allows multiple arguments to be placed ahead of the first 
+      argument in [l]. Can be used as [(f $@ a & b & c) d] with the resulting 
+      call being [f d a b c]. *)
+  let ( & ) l r = l $@ r
   
   (** [o =?: d] returns the value of [o] unless it is [None], then returns 
       [d]. *)
