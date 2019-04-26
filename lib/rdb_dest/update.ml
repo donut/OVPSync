@@ -53,7 +53,11 @@ end
 
 
 let or_insert_x_fields dbc x x_id fields =
+  if BatList.is_empty fields then Lwt.return ()
+  else
+  
   let x_name = match x with `Source -> "source" | `Video -> "video" in
+
   let module D = Dynaparam in
   let (D.Pack (typ, vals, placeholders)) = List.fold_left 
     (fun pack (name, value) ->
@@ -61,6 +65,7 @@ let or_insert_x_fields dbc x x_id fields =
             (x_id, name, value) "(?, ?, ?)" pack)
     D.empty fields in
   let placeholders = String.concat ", " placeholders in
+
   let sql = Printf.sprintf
     "INSERT INTO %s_field (%s_id, name, value) VALUES %s \
      ON DUPLICATE KEY UPDATE value = VALUES(value)"

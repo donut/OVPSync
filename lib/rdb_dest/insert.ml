@@ -78,6 +78,10 @@ let new_tags_of dbc lst =
   let%lwt existing = Select.tags_by_name dbc lst in
   let names = lst |> List.filter
     (fun n -> not @@ List.exists (snd %> ((=) n)) existing) in
+
+  if BatList.is_empty names then Lwt.return ()
+  else
+
   let module D = Dynaparam in
   let (D.Pack (typ, values, placeholders)) = List.fold_left
     (fun pack tag -> D.add Caqti_type.string tag "(?)" pack) D.empty names in
@@ -127,6 +131,7 @@ let video dbc vid =
   let canonical = Video.canonical vid in
   let match_canonical s = 
     Source.(name s == name canonical && media_id s == media_id canonical) in
+
   let%lwt sources =
     let lst = Video.sources vid in
     let includes_canonical = lst |> List.exists match_canonical in

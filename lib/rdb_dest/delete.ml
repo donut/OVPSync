@@ -1,6 +1,7 @@
 
 module type DBC = Caqti_lwt.CONNECTION
 
+
 module Q = struct 
 
   module Creq = Caqti_request
@@ -22,7 +23,11 @@ let source dbc id =
 
 
 let x_fields_not_named dbc x x_id names =
+  if BatList.is_empty names then Lwt.return ()
+  else
+
   let x_name = match x with `Source -> "source" | `Video -> "video" in
+
   let module D = Dynaparam in
   let (D.Pack (typ, vals, placeholders)) = List.fold_left 
     (fun pack name -> D.add Caqti_type.string name "?" pack)
@@ -30,6 +35,7 @@ let x_fields_not_named dbc x x_id names =
   let typ = Caqti_type.(tup2 int typ) in
   let vals = (x_id, vals) in
   let placeholders = String.concat ", " placeholders in
+
   let sql = Printf.sprintf
     "DELETE FROM %s_field WHERE %s_id = ? AND name NOT IN (%s)"
     x_name x_name placeholders in
