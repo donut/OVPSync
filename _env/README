@@ -1,0 +1,3 @@
+Environment specific files and settings.
+
+To initialize the database with a SQL file, put it in this folder with the name "mysql-dump.sql".

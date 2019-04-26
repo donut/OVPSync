@@ -1,0 +1,51 @@
+
+{ // Override log level of all other components. Optional.
+  // Valid values for all log_level fields:
+  // off, fatal, error, warn, info, debug, trace
+  "log_level_override" : null
+  // The host in the docker context should be the name of the service in
+  // docker-compose.yml. In this case it should probably stay "db".
+, "db_conn" : "mariadb://ovp_sync:abc123@db/ovp_sync"
+
+, "jw_client" : 
+  { // Platform API key and secret
+    "key": "abc123"
+  , "secret": "abcdefgh12345678"
+    // How many Platform API hits to try to leave for other users.
+  , "rate_limit_to_leave": 10
+  , "log_level" : "info"
+  , "log_namespace" : "JW_client" }
+
+, "jw_source" : 
+  { // How many videos should be worked on at one time. This is passed to
+    // the Platform API endpoint /videos/list as the "result_limit" parameter.
+    // Max of 1000.
+    // @see https://developer.jwplayer.com/jw-platform/reference/v1/methods/videos/list.html#parameters
+    "chunk_size" : 1000
+    // The JW tag to apply to videos that are temporarily published so their
+    // video files can be downloaded.
+  , "temp_publish_tag" : "Temporarily Published"
+    // Name of the custom field to add to videos who temporarily have their
+    // expire_date unset.
+  , "backup_expires_field" : "ovp_sync.backup_expires_date"
+  , "log_level" : "info"
+  , "log_namespace" : "Source" }
+
+, "rdb_dest" : 
+  { // Absolute path to where the video and thumbnail files should be
+    // downloaded to within the Docker container. 
+    "files_path" : "/data/files"
+  , "log_level" : "info"
+  , "log_namespace" : "Dest" }
+
+, "sync" :
+  { // How many LWTs (light-weight threads) to runs simultaneously. Running
+    // too many at the same time can lead to [Unix.EINVAL] exceptions.
+    // @see https://github.com/ocsigen/lwt/issues/222
+    // 100 seems be safe. Tried 300, but that caused problems.
+    "max_threads" : 100
+    // Once finished syncing, start again.
+  , "loop_infinitely" : true
+  , "log_level" : "info"
+  , "log_namespace" : "Sync" }
+}

@@ -24,30 +24,32 @@ let ptime_of_int i =
 let int_of_ptime p =
   p |> Ptime.to_float_s |> int_of_float
 
-let use_pool p f = Caqti_lwt.Pool.use f p >>= Caqti_lwt.or_fail
 
-let use_pool' p f =
-  p |> Caqti_lwt.Pool.use begin fun (module DB : DBC) ->
-    try%lwt f (module DB : DBC) >|= fun x -> Ok (Ok x) with
-    | exn -> Lwt.return @@ Ok (Error exn)
-  end >>= Caqti_lwt.or_fail >|= function
+let use_pool p f =
+  let%lwt result = p |> Caqti_lwt.Pool.use begin fun dbc ->
+    match%lwt f dbc with
+    | exception exn -> Lwt.return @@ Ok (Error exn)
+    | x -> Lwt.return @@ Ok (Ok x)
+  end >>= Caqti_lwt.or_fail in
+
+  match result with
   | Error exn -> raise exn
-  | Ok x -> x
+  | Ok x -> Lwt.return x
 
-let exec pool query values = 
-  use_pool pool (fun (module DB : DBC) -> DB.exec query values)
 
-let insert pool query values =
-  use_pool' pool begin fun (module DB : DBC) ->
-    DB.exec query values >>= Caqti_lwt.or_fail >>= fun () ->
-    last_insert_id (module DB)
-  end
+let exec (module DB : DBC) query values =
+  DB.exec query values >>= Caqti_lwt.or_fail
 
-let collect_list pool query values =
-  use_pool pool (fun (module DB : DBC) -> DB.collect_list query values)
 
-let find_opt pool query values =
-  use_pool pool (fun (module DB : DBC) -> DB.find_opt query values)
+let insert dbc query values =
+  exec dbc query values >>= fun () ->
+  last_insert_id dbc
+
+let collect_list (module DB : DBC) query values =
+  DB.collect_list query values >>= Caqti_lwt.or_fail
+
+let find_opt (module DB : DBC) query values =
+  DB.find_opt query values >>= Caqti_lwt.or_fail
 
 let items_are_same la lb =
   let have_same () =

@@ -1,0 +1,5 @@
+(library
+ (name sync)
+ (libraries lib logger batteries lwt)
+ (preprocess
+  (pps lwt_ppx)))

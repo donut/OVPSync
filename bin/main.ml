@@ -250,7 +250,9 @@ let main () =
 
   end) in
 
-  Synker.sync ()
+  Synker.sync () >>= fun () ->
+
+  Caqti_lwt.Pool.drain pool
 
 let () = 
   Random.self_init ();

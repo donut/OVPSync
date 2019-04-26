@@ -1,8 +1,0 @@
-(jbuild_version 1)
-
-(library
-  ((name jw_client)
-   (libraries (lib logger
-               atdgen batteries cohttp.lwt lwt sha))
-   (preprocess (pps (lwt_ppx)))
-  ))

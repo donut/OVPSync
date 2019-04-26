@@ -1,0 +1,27 @@
+# Suggested docker-compose.override.yml settings for development.
+# Copy this file to docker-compose.override.yml and run `make docker-images`
+# and then `make start` to begin with development. You could also symlink it.
+version: '3.6'
+
+services:
+  app:
+    build: 
+      target: development
+    volumes:
+      # Required for building.
+      - ./docker/app/Makefile:/app/Makefile:ro
+      - ./bin:/app/bin
+      - ./lib:/app/lib
+      - ./dune-project:/app/dune-project
+      - ./esy.lock:/app/esy.lock
+      - ./package.json:/app/package.json
+
+      # Required for running app
+      - ./_env/config.json:/app/_env/config.json:ro
+
+  db: 
+    ports: [ "3306:3306" ]
+    # Uncomment below to enable detailed logging for debugging purposes.
+    # Use the `make follow-db-logs` command to follow the relevant logs.
+    # volumes:
+    #   - ./docker/db/debug-mode.cnf:/etc/mysql/conf.d/zzz-debug-mode.cnf

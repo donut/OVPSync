@@ -1,0 +1,32 @@
+version: '3.6'
+
+services:
+  app:
+    build: 
+      context: .
+      args:
+        TZ: ${TZ:?TZ unset. Use `make .env`.}
+      # Use docker-compose.override.yml to target the `development` environment.
+      target: production
+    volumes:
+      - ./docker/app/entrypoint.sh:/app/entrypoint.sh
+      - ./_env/config.json:/app/_env/config.json:ro
+      - ./_data/app:/app/_data
+    depends_on:
+      - db
+
+  db: 
+    build:
+      context: ./docker/db
+      args: [ TZ ]
+    restart: always
+    ports: [ "3306" ]
+    environment:
+      - MYSQL_ROOT_PASSWORD
+      - MYSQL_DATABASE
+      - MYSQL_USER
+      - MYSQL_PASSWORD
+    volumes:
+      - ./_data/db/data:/var/lib/mysql
+      - ./docker/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./_env/mysql-dump.sql:/docker-entrypoint-initdb.d/002-dump.sql:ro

@@ -1,5 +1,4 @@
 
-open Lwt.Infix
 open Lib.Infix
 
 module type DBC = Caqti_lwt.CONNECTION
@@ -71,22 +70,24 @@ let source_of_row row ~custom =
   let modified = modified_pt |> Util.int_of_ptime in
   { Source. id = Some id; name; media_id; video_id; custom; added; modified }
 
-let source_fields pl source_id =
-  Util.collect_list pl Q.source_fields source_id
+let source_fields dbc source_id =
+  Util.collect_list dbc Q.source_fields source_id
 
-let source pl ~name ~media_id =
-  Util.find_opt pl Q.source (name, media_id) >>= function
+let source dbc ~name ~media_id =
+  match%lwt Util.find_opt dbc Q.source (name, media_id) with
   | None -> Lwt.return None
   | Some row ->
     let id = BatTuple.(Tuple3.first row |> Tuple4.first) in
-    let%lwt custom = source_fields pl id in
+    let%lwt custom = source_fields dbc id in
     Lwt.return @@ Some (source_of_row row ~custom)
 
-let source_id pl ~name ~media_id =
-  Util.find_opt pl Q.source_id (name, media_id)
+let source_id dbc ~name ~media_id =
+  Util.find_opt dbc Q.source_id (name, media_id)
 
-let source_fields_by_video_id pl video_id =
-  let%lwt fields = Util.collect_list pl Q.source_fields_by_video_id video_id in
+let source_fields_by_video_id dbc video_id =
+  let%lwt fields =
+    Util.collect_list dbc Q.source_fields_by_video_id video_id 
+  in
   fields
     |> BatList.group (fun (a, _, _) (b, _, _) -> compare a b)
     |> List.map (fun l ->
@@ -95,9 +96,9 @@ let source_fields_by_video_id pl video_id =
       (source_id, l'))
     |> Lwt.return
 
-let sources_by_video_id pl video_id =
-  let%lwt sources = Util.collect_list pl Q.sources_by_video_id video_id in
-  let%lwt fields = source_fields_by_video_id pl video_id in
+let sources_by_video_id dbc video_id =
+  let%lwt sources = Util.collect_list dbc Q.sources_by_video_id video_id in
+  let%lwt fields = source_fields_by_video_id dbc video_id in
   sources
     |> List.map (fun row ->
       let id = BatTuple.(Tuple3.first row |> Tuple4.first) in
@@ -105,7 +106,8 @@ let sources_by_video_id pl video_id =
       source_of_row row ~custom)
     |> Lwt.return
 
-let tags_by_name pl names = 
+
+let tags_by_name dbc names = 
   let module D = Dynaparam in
   let (D.Pack (typ, values, plist)) = List.fold_left
     (fun pack name -> D.add Caqti_type.string name "?" pack)
@@ -116,10 +118,10 @@ let tags_by_name pl names =
     placeholders (List.length names) in
   let query = Caqti_request.collect
     ~oneshot:true typ Caqti_type.(tup2 int string) sql in
-  Util.collect_list pl query values
+  Util.collect_list dbc query values
 
-let video pl id =
-  match%lwt Util.find_opt pl Q.video id with
+let video dbc id =
+  match%lwt Util.find_opt dbc Q.video id with
   | None -> Lwt.return None
   | Some (first, second, third, fourth) ->
     let title, slug, publish_pt = first in
@@ -139,11 +141,11 @@ let video pl id =
       |> Uri.pct_decode in
     let thumbnail_uri = Bopt.map Uri.of_string thumbnail in
 
-    let%lwt tags = Util.collect_list pl Q.video_tags id in
-    let%lwt custom = Util.collect_list pl Q.video_fields id in
+    let%lwt tags = Util.collect_list dbc Q.video_tags id in
+    let%lwt custom = Util.collect_list dbc Q.video_fields id in
     let link = link' >|? Uri.of_string in
 
-    let%lwt sources = sources_by_video_id pl id in
+    let%lwt sources = sources_by_video_id dbc id in
     let canonical = sources |> List.find (fun s ->
       let id = (Source.id s |> Bopt.get) in
       id == canonical_source_id)
@@ -157,7 +159,8 @@ let video pl id =
       ; cms_id; link; canonical; sources }
     |> Lwt.return
 
-let video_id_by_media_ids pl media_ids = 
+
+let video_id_by_media_ids dbc media_ids = 
   let module D = Dynaparam in
   let placeholder = "(name = ? AND media_id = ?)" in
   let typ = Caqti_type.(tup2 string string) in
@@ -172,4 +175,4 @@ let video_id_by_media_ids pl media_ids =
       LIMIT 1"
     placeholders in
   let query = Caqti_request.find_opt ~oneshot:true typs Caqti_type.int sql in
-  Util.find_opt pl query values
+  Util.find_opt dbc query values

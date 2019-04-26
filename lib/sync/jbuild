@@ -1,8 +1,0 @@
-(jbuild_version 1)
-
-(library
-  ((name sync)
-   (libraries (lib logger
-               batteries lwt))
-   (preprocess (pps (lwt_ppx)))
-  ))
