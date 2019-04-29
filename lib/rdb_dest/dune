@@ -3,4 +3,4 @@
  (libraries lib logger sync batteries caqti caqti-driver-mariadb caqti-lwt
    cohttp-lwt cohttp-lwt-unix lwt re uri)
  (preprocess
-  (pps ppx_fields_conv lwt_ppx)))
+  (pps lwt_ppx ppx_fields_conv)))
