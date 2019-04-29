@@ -37,19 +37,27 @@ let use_pool p f =
   | Ok x -> Lwt.return x
 
 
-let exec (module DB : DBC) query values =
-  DB.exec query values >>= Caqti_lwt.or_fail
+let run p_or_c f =
+  match p_or_c with
+  | `Connection c -> f c
+  | `Pool p -> use_pool p f
 
 
-let insert dbc query values =
-  exec dbc query values >>= fun () ->
-  last_insert_id dbc
+let exec porc query values = run porc (fun (module DB : DBC) ->  
+  DB.exec query values >>= Caqti_lwt.or_fail)
 
-let collect_list (module DB : DBC) query values =
-  DB.collect_list query values >>= Caqti_lwt.or_fail
 
-let find_opt (module DB : DBC) query values =
-  DB.find_opt query values >>= Caqti_lwt.or_fail
+let insert proc query values = run proc begin fun dbc -> 
+  let c = `Connection dbc in
+  exec c query values >>= fun () ->
+  run c last_insert_id 
+end
+
+let collect_list porc query values = run porc (fun (module DB : DBC) -> 
+  DB.collect_list query values >>= Caqti_lwt.or_fail)
+
+let find_opt porc query values = run porc (fun (module DB : DBC) ->
+  DB.find_opt query values >>= Caqti_lwt.or_fail)
 
 let items_are_same la lb =
   let have_same () =

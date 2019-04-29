@@ -58,11 +58,11 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
         | Some t -> Lwt.return (Some t)
 
   let get_video ~ovp ~media_id = 
-    Util.use_pool Conf.db_pool (get_video' ~ovp ~media_id)
+    get_video' (`Pool Conf.db_pool) ~ovp ~media_id
 
 
   let get_video_id_by_media_ids media_ids =
-    Util.use_pool Conf.db_pool (Select.video_id_by_media_ids $@ media_ids)
+    Select.video_id_by_media_ids (`Pool Conf.db_pool) media_ids
 
   let gen_file_paths t =
     let canonical = Video.canonical t in
@@ -368,7 +368,7 @@ module Make (Log : Logger.Sig) (Conf : Config) = struct
     let media_id = media_id_of_video t in
     Log.debugf "Saving [%s]." media_id >>= fun () ->
     
-    match%lwt Util.use_pool Conf.db_pool (save' $@ t) with
+    match%lwt save' (`Pool Conf.db_pool) t with
     | exception exn ->
       Log.errorf ~exn "[%s] Failed saving." (media_id_of_video t) >>= fun () ->
       raise exn
