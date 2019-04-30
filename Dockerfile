@@ -66,6 +66,10 @@ ENTRYPOINT ["tail", "-f", "/dev/null"]
 ### Build for production ###
 FROM development as app-build
 
+# See https://serverfault.com/q/683605/54523
+ARG TZ
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 WORKDIR /app
 
 COPY bin bin/
@@ -78,6 +82,10 @@ RUN make main.exe
 
 ### Production ###
 FROM ubuntu:bionic as production
+
+# See https://serverfault.com/q/683605/54523
+ARG TZ
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get update && apt-get install --assume-yes \
   # Needed for @opam/caqti-driver-mariadb
