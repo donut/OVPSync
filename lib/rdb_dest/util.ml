@@ -58,8 +58,3 @@ let collect_list porc query values = run porc (fun (module DB : DBC) ->
 
 let find_opt porc query values = run porc (fun (module DB : DBC) ->
   DB.find_opt query values >>= Caqti_lwt.or_fail)
-
-let items_are_same la lb =
-  let have_same () =
-    not @@ List.exists (fun x -> not @@ List.exists ((=) x) lb) la in
-  List.compare_lengths la lb = 0 || have_same ()

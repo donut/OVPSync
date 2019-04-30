@@ -9,7 +9,7 @@ module type Config = sig
   val files_path : string
 end
 
-module Make (Log : Logger.Sig) (Conf: Config) : sig
+module type Made = sig
   type t = Video.t
   
   (** [get_video ~ovp ~media_id] retrieves the video attached to the [ovp]  
@@ -19,3 +19,5 @@ module Make (Log : Logger.Sig) (Conf: Config) : sig
 
   val save : t -> t Lwt.t
 end
+
+module Make : functor (Log : Logger.Sig) (Conf : Config) -> Made

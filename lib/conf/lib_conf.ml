@@ -6,6 +6,9 @@ module Jw_source = Jw_source_t
 module Rdb_dest = Rdb_dest_t
 module Sync = Sync_t
 
+
+type t = Root.t
+
 let read_file path =
   BatFile.lines_of path |> BatList.of_enum |> String.concat ""
 

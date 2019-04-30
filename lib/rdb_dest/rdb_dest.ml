@@ -44,7 +44,20 @@ let thumb_ext t =
 let media_id_of_video t =
   Video.canonical t |> Source.media_id
 
-module Make (Log : Logger.Sig) (Conf : Config) = struct
+
+module type Made = sig
+  type t = Video.t
+  
+  (** [get_video ~ovp ~media_id] retrieves the video attached to the [ovp]  
+      (Source.name) and [media_id] combination, if any. *)
+  val get_video : ovp:string -> media_id:string -> t option Lwt.t
+  val get_video_id_by_media_ids : (string * string) list -> int option Lwt.t
+
+  val save : t -> t Lwt.t
+end
+
+
+module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
   type t = Video.t
 
 

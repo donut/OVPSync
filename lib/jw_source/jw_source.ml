@@ -34,6 +34,18 @@ module type Config = sig
 end
 
 
+module type Made = sig
+  type t = Jw_client.Platform.videos_list_video
+         * (string * int option * int option) option
+         * string option
+
+  val make_stream
+    : should_sync:(t -> bool Lwt.t) -> stop_flag:(bool ref) -> t Lwt_stream.t
+  val cleanup : t -> unit Lwt.t
+  val final_cleanup : unit -> unit Lwt.t
+end
+
+
 let original_thumb_url media_id = 
   sprintf "https://cdn.jwplayer.com/thumbs/%s.jpg" media_id
 
@@ -41,9 +53,9 @@ let original_thumb_url media_id =
 module Make (Client : Jw_client.Platform.Client)
             (Var_store : Sync.Variable_store)
             (Log : Logger.Sig)
-            (Conf : Config) =
+            (Conf : Config)
+            : Made =
 struct
-
   type accounts_template = Jw_client.Platform.accounts_templates_list_template
   type videos_video = Jw_client.Platform.videos_list_video
   type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
