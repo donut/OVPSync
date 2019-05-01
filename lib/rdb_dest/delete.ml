@@ -17,7 +17,7 @@ module Q = struct
 
   let all_x_fields_sql x = 
     let x = match x with `Source -> "source" | `Video -> "video" in
-    Printf.sprintf "DELETE FROM %s_fields WHERE %s_id = ?" x x
+    Printf.sprintf "DELETE FROM %s_field WHERE %s_id = ?" x x
 
   let all_x_fields x = 
     Creq.exec int (all_x_fields_sql x)
