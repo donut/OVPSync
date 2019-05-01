@@ -40,6 +40,8 @@ module Level = struct
 end
 
 module type Sig = sig
+  val level : Level.t
+
   val log : Level.t -> string -> unit Lwt.t
   val logf : Level.t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
   val fatal : ?exn:exn -> string -> unit Lwt.t
@@ -62,6 +64,8 @@ module type Config = sig
 end
 
 module Make (Conf : Config) : Sig = struct
+  let level = Conf.level
+
   let datetime () =
     let { Unix.tm_year=yr; tm_mon=mon; tm_mday=day;
           tm_hour=hr; tm_min=min; tm_sec=sec; _ }

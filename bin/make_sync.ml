@@ -195,8 +195,9 @@ let make
       | None -> Lwt.return true
       | Some old ->
         let%lwt knew = dest_t_of_src_t src_item in
+        let debug = Log.level = `Trace in
         let check_md5 = sourcetype = `File in
-        Lwt.return @@ Has_changed.video ~check_md5 old knew
+        Lwt.return @@ Has_changed.video ~debug ~check_md5 old knew
   end) in
 
   (module Synker : Sync.Synchronizer)

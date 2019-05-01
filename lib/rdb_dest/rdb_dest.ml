@@ -298,7 +298,6 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
     end
 
 
-
   let save_existing dbc t_id new_t =
     let new_t = Video.{ new_t with id = Some t_id } in
     let%lwt old_t = match%lwt Select.video dbc t_id with

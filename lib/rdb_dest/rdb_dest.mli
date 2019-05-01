@@ -3,6 +3,9 @@ module Client = Client
 module Video = Video
 module Source = Source
 
+(** The local URI scheme used for files that have been saved. *)
+val local_scheme : string
+
 module type Config = sig
   val db_pool : (Caqti_lwt.connection, Caqti_error.t) Caqti_lwt.Pool.t
   (* [files_path] Where to save video and thumbnail files to. *)
