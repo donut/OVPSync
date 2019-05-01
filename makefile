@@ -118,9 +118,21 @@ clean-ml-of-atd:
 	$(app-make) $@
 
 
+_esy := _esy/default/installation.json
+$(_esy): esy.lock/index.json
+	esy install
+
+
+ml_files = $(shell for file in $$(find . -type f -iname "*.ml"); do echo "$$file"; done | paste -sd " " -)
+
+main-exe := _esy/default/build/default/bin/main.exe
+$(main-exe): $(_esy) $(ml_files)
+	esy build
+
 .PHONY: main.exe
 main.exe: .env
 	$(app-make) $@
+	
 
 .PHONY: rebuild
 rebuild: .env
@@ -130,6 +142,7 @@ rebuild: .env
 .PHONY: run
 run: .env
 	$(app-make) $@
+	$(MAKE) $(main-exe)
 
 # Build and run main.exe
 .PHONY: brun
