@@ -4,12 +4,9 @@ let plf fmt = Printf.ksprintf (print_endline) fmt
 
 
 let check debug media_id name changed =
-  if debug then 
-    let status = if changed then "changed" else "same" in
-    plf "### [%s] %s: %s ###" media_id name status;
-    changed
-  else
-    changed
+  if debug && changed 
+    then plf "### [%s] %s: changed ###" media_id name else ();
+  changed
 
 
 let items_are_same la lb =
