@@ -1,4 +1,6 @@
 
+module Bopt = BatOption
+
 
 let plf fmt = Printf.ksprintf (print_endline) fmt
 
@@ -26,6 +28,11 @@ let sources_have_changed old knew =
   end
 
 
+let local_scheme = function
+  | None -> false
+  | Some u -> Uri.scheme u = Some Rdb_dest.local_scheme
+
+
 let video ?(debug=false) ~check_md5 old knew =
   let open Rdb_dest.Video in
   let chk = check debug old.canonical.media_id in
@@ -38,8 +45,21 @@ let video ?(debug=false) ~check_md5 old knew =
   || chk "slug" (old.slug <> knew.slug)
   || chk "publish" (old.publish <> knew.publish)
   || chk "expires" (old.expires <> knew.expires)
-  (* file_uri and thumbnail_uri are not checked as they are changed to the
-     local URI when they're saved *)
+  (* file_uri and thumbnail_uri are not compared if the old URIs are local. If
+     they're not local, it implies that either no URI was provided before or
+     there was a failure to save the file in the previous attempt. *)
+  || chk "thumbnail_uri" begin 
+       not (local_scheme old.thumbnail_uri) 
+       (* File was not saved previously, unless URI was always [None],
+          this needs another attempt at syncing. *)
+       && not (old.thumbnail_uri = None && knew.thumbnail_uri = None)
+     end
+  || chk "file_uri" begin
+       not (local_scheme old.file_uri) 
+       (* File was not saved previously, unless URI was always [None],
+           this needs another attempt at syncing. *)
+         && not (old.file_uri = None && knew.file_uri = None)
+     end
   (* filename is not checked, as the name stored in the database is based on
      the name of the file saved. This may have extra data attached and may not
      be taken exactly from what is passed from the source. *)
