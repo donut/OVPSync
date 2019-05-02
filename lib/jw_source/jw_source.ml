@@ -152,7 +152,7 @@ struct
 
 
   (* Cache the passthrough template key. This will save nearly 1 API request
-   * per video processed. *)
+     per video processed. *)
   let passthrough_template_key = ref None
 
   let add_passthroug_conversion media_id =
@@ -205,7 +205,7 @@ struct
         | None -> Lwt.return true
         | Some { status = `Failed; key; _ } ->
           (* @todo Deal with passthrough conversions that fail every time.
-           *       This has the potential to infinitely loop. *)
+                   This has the potential to infinitely loop. *)
           Log.errorf "[%s] Passthrough conversion creation failed"  
             vid.key >>= fun () ->
           Client.videos_conversions_delete key >>= fun () ->
@@ -242,7 +242,7 @@ struct
       | None -> Lwt.return ()
       | Some { video; _ } ->
         (* Make sure we have the latest expires date in case it was set
-         * outside of this program. *)
+           outside of this program. *)
         let expires_date' = match video.expires_date with
         | Some e -> e
         | None -> expires_date
@@ -371,13 +371,13 @@ struct
       begin match !videos_to_check, !processing_videos with
       | [], [] ->
         (* Check for new videos at the current offset in case more were 
-          * added (or some removed, pushing more into the current offset) in 
-          * the time it took to process the current set *)
+           added (or some removed, pushing more into the current offset) in 
+           the time it took to process the current set *)
         let%lwt refreshed = match !current_videos_set with
         (* First set, no need to refresh *)
         | [] -> Lwt.return ([], []) 
         (* Since [videos_to_check] and [processing_videos] are empty, we can
-        * assume that all videos in [current_videos_set] have been returned. *)
+           assume that all videos in [current_videos_set] have been returned. *)
         | returned -> refresh_current_videos_set ~returned
         in
 
@@ -467,8 +467,8 @@ struct
           Log.infof "[%s] has URL source or non-ready status. RETURNING!"
             vid.key >>= fun () ->
           (* Since this program is designed to be run over and over again, 
-          * constantly syncing media from JW, we can catch anything that's
-          * processing the next time we reach this offset. *)
+             constantly syncing media from JW, we can catch anything that's
+             processing the next time we reach this offset. *)
           let%lwt vid = clear_temp_changes_for_return vid in
           let file = vid.sourceurl >|? (fun s -> (s, None, None)) in
           let thumb = original_thumb_url vid.key in
@@ -497,8 +497,8 @@ struct
                 >>= fun () ->
               processing_videos := vid :: !processing_videos;
               (* This video isn't ready to be returned yet, take at the next
-              * video in the list. This video will get looked at again once
-              * we've gone through every video in the current list to check. *)
+                 video in the list. This video will get looked at again once
+                 we've gone through every video in the current list to check. *)
               next ()
 
     in
