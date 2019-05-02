@@ -68,6 +68,7 @@ FROM development as app-build
 
 # See https://serverfault.com/q/683605/54523
 ARG TZ
+ENV TZ=$TZ
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
@@ -85,6 +86,7 @@ FROM ubuntu:bionic as production
 
 # See https://serverfault.com/q/683605/54523
 ARG TZ
+ENV TZ=$TZ
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get update && apt-get install --assume-yes \
