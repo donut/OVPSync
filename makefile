@@ -150,7 +150,7 @@ rebuild: .env
 .PHONY: run
 run: .env
 	$(app-make) $@
-	$(MAKE) $(main-exe)
+	@$(MAKE) $(main-exe)
 
 # Build and run main.exe
 .PHONY: brun
