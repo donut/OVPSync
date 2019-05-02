@@ -50,6 +50,14 @@ docker-images: .env
 start: .env _env/mysql-dump.sql _data/app _data/db/data
 	$(dc) up $(s) || $(MAKE) stop s=$(s)
 
+.PHONY: start-detached
+start-detached: .env _env/mysql-dump.sql _data/app _data/db/data
+	$(dc) up --detach $(s) 
+
+.PHONY: restart
+restart: .env _env/mysql-dump.sql _data/app _data/db/data
+	$(dc) restart $(s) 
+
 .PHONY: stop
 stop: .env
 	$(dc) stop $(s)
