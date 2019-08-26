@@ -33,7 +33,7 @@ RUN mkdir /esy
 WORKDIR /esy
 
 ENV NPM_CONFIG_PREFIX=/esy
-RUN yarn global add esy@0.5.6
+RUN yarn global add esy@0.5.8
 
 ENV PATH=/esy/bin:$PATH
 
