@@ -24,12 +24,12 @@
     "@opam/lwt_ssl": "1.1.2",
     "@opam/sha": "1.12",
     "@opam/tls": "0.10.2",
-    "ocaml": "~4.7.0",
+    "ocaml": "4.7.x",
     "refmterr": "*"
   },
   "devDependencies": {
     "@opam/merlin": "*",
-    "ocaml": "~4.7.0",
+    "ocaml": "4.7.x",
     "@opam/odoc": "*",
     "@opam/utop": "*"
   }
