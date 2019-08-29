@@ -9,15 +9,24 @@ type t = {
   custom : (string * string) list;
 } [@@deriving fields]
 
+
 let are_same a b =
   name a = name b && media_id a = media_id b
 
+
 exception Sources_not_same of string * string
 
-let items_are_same la lb =
-  let have_same () =
-    not @@ List.exists (fun x -> not @@ List.exists ((=) x) lb) la in
-  List.compare_lengths la lb = 0 || have_same ()
+
+let rec items_are_same la lb =
+  if List.compare_lengths la lb <> 0 then false
+  else
+
+  match la with
+  | [] -> BatList.is_empty lb
+  | hd :: tl ->
+    let filter = List.filter ((<>) hd) in
+    items_are_same (filter tl) (filter lb)
+
 
 let has_changed old knew =
   if not @@ are_same old knew then  
