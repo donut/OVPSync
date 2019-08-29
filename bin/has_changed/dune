@@ -1,6 +1,7 @@
 (library
  (name has_changed)
- (libraries rdb_dest
+ (libraries 
+  lib logger rdb_dest 
   batteries lwt)
  (preprocess
   (pps lwt_ppx)))
