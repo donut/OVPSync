@@ -47,7 +47,7 @@ let video ?(debug=false) ~check_md5 old knew =
      of the video file, but because the source may do clean up on the item
      after giving it to the destination, these timestamps are likely to change. 
      *)
-     chk "title" (old.title <>knew.title)
+     chk "title" (old.title <> knew.title)
   || chk "slug" (old.slug <> knew.slug)
   || chk "publish" (old.publish <> knew.publish)
   || chk "expires" (old.expires <> knew.expires)
