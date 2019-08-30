@@ -133,6 +133,12 @@ $(_esy): esy.lock/index.json
 
 ml_files = $(shell for file in $$(find . -type f -iname "*.ml"); do echo "$$file"; done | paste -sd " " -)
 
+
+.PHONY: test
+test: $(_esy) $(ml_files)
+	esy x dune runtest
+
+
 main-exe := _esy/default/build/default/bin/main.exe
 $(main-exe): $(_esy) $(ml_files)
 	esy build

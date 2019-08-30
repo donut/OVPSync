@@ -1,7 +1,8 @@
 (library
  (name has_changed)
+ (inline_tests)
  (libraries 
   lib logger rdb_dest 
   batteries lwt)
  (preprocess
-  (pps lwt_ppx)))
+  (pps lwt_ppx ppx_inline_test)))

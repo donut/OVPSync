@@ -3,8 +3,8 @@ module Client = Client
 module Video = Video
 module Source = Source
 
-(** The local URI scheme used for files that have been saved. *)
-val local_scheme : string
+(* [is_uri_local uri] checks if [uri] looks to be a local or not. *)
+val is_uri_local : Uri.t -> bool
 
 module type Config = sig
   val db_pool : (Caqti_lwt.connection, Caqti_error.t) Caqti_lwt.Pool.t
