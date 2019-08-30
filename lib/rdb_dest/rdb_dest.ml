@@ -26,6 +26,11 @@ let make_local_uri rel_path filename =
   let filename = Uri.pct_encode filename in
   spf "%s:///%s/%s" local_scheme rel_path filename
 
+
+let is_uri_local uri =
+  Uri.scheme uri |> (=) (Some local_scheme)
+
+
 let video_ext t = 
   let vid_id = Video.id t =?: 0 in
   let uri = Video.file_uri t =?: Uri.empty in
@@ -224,7 +229,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
 
   let rm_old_file_if_renamed ~old ~new_ =
     match old with
-    | Some old when old <> new_ && Uri.scheme old = Some local_scheme ->
+    | Some old when old <> new_ && is_uri_local old ->
       Log.debugf "--> Removing old file at [%s]" (Uri.to_string old)
         >>= fun () ->
       File.unlink_if_exists @@ abs_path_of_uri old
@@ -271,8 +276,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
     | None -> Lwt.return t
     | Some uri -> begin
       if Video.md5 new_t = Video.md5 old_t
-        && Video.file_uri old_t |> Bopt.map Uri.scheme
-            = Some (Some local_scheme)
+        && Video.file_uri old_t >|? is_uri_local =?: false
       then maybe_update_video_file_path dbc t new_t
       else
 
