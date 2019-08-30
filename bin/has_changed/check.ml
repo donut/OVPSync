@@ -132,14 +132,14 @@ let source_field run name ~old ~new' =
 
 
 let source_list_field run name ~old ~new' =
-  let has_changed la lb =
-    if List.compare_lengths old new' <> 0 then true
-    else
-
-    la |> List.exists begin fun a ->
-      match List.find_opt (Rdb_dest.Source.are_same a) lb with
+  let has_changed old new' =
+    (* [old], having been previously saved, may have sources that [new'] knows
+       nothing about. So we only care about sources in [new'] that have are
+       different than their [old] counterparts are don't exist in [old]. *)
+    new' |> List.exists begin fun n ->
+      match List.find_opt (Rdb_dest.Source.are_same n) old with
       | None -> true
-      | Some b -> source_field_has_changed a b
+      | Some o -> source_field_has_changed o n
     end
   in
 
