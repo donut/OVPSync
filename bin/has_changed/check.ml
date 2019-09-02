@@ -236,7 +236,7 @@ let%test_module "source_field" = (module struct
 
   let base = 
     { id = None
-    ; name = "jw"
+    ; name = "jw-12345"
     ; media_id = "1234"
     ; video_id = None
     ; added = 1234
@@ -274,15 +274,43 @@ let%test_module "source_field" = (module struct
 
   let%test "source_field different custom" =
     source_field test__run "" ~old:base ~new':diff_custom
+
+  let jw = base
+  let ooyala = 
+    { jw with
+      name = "ooyala"
+    ; media_id = "BiYmFmNTE6Ael76VbXQjh72oxtSkyM0_" }
+  let ovp_migrate = 
+    { base with
+      name = "ovp_migrate"
+    ; media_id = "a96bb757be39263a17170100" }
     
-  let%test "source_list_field no change" =
-    let old = [base; diff_id; diff_name; diff_media_id; diff_video_id] in
+  let%test "source_list_field old and new are same" =
+    let old = [jw; ooyala; ovp_migrate] in
     let new' = old in
     not @@ source_list_field test__run "" ~old ~new'
 
-  let%test "source_list_field has change" =
-    let old = [base; diff_id; diff_name; diff_media_id; diff_video_id] in
-    let new' = [base; diff_name; diff_media_id; diff_added; diff_modified] in
+  let%test "source_list_field fewer but no different sources in new" =
+    let old = [jw; ooyala; ovp_migrate] in
+    let new' = [jw] in
+    not @@ source_list_field test__run "" ~old ~new'
+
+  let%test "source_list_field changed source in new" =
+    let old = [jw; ooyala; ovp_migrate] in
+    let jw' = { jw with added = 12345 } in
+    let new' = [jw'] in
+    source_list_field test__run "" ~old ~new'
+
+  let%test "source_list_field additional source in new, but not in old" =
+    let old = [jw; ooyala; ovp_migrate] in
+    let jw' = { jw with media_id = "goomba" } in
+    let new' = [jw; jw'] in
+    source_list_field test__run "" ~old ~new'
+
+  let%test "source_list_field only new source in new" =
+    let old = [jw; ooyala; ovp_migrate] in
+    let jw' = { jw with media_id = "goomba" } in
+    let new' = [jw'] in
     source_list_field test__run "" ~old ~new'
 end)
 
