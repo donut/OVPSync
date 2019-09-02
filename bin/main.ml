@@ -41,7 +41,7 @@ let main () =
   let module Dest = (val m : Rdb_dest.Made) in
 
   let module Log_synker = Logger.Make(struct
-    let prefix = conf.rdb_dest.log_namespace
+    let prefix = conf.sync.log_namespace
     let level = get_log_level conf.sync.log_level
   end) in
 
