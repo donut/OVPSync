@@ -120,6 +120,7 @@ let sources_of_video dbc vid =
   let canonical = List.find is_canonical sources in
   Lwt.return { vid with canonical; sources }
 
+
 let or_insert_video_fields dbc vid_id fields =
   or_insert_x_fields dbc `Video vid_id fields
 
@@ -151,6 +152,7 @@ let video dbc vid =
   let file_str = Video.file_uri vid |> Bopt.map Uri.to_string in
   let thumb_str = Video.thumbnail_uri vid |> Bopt.map Uri.to_string in
   let link_str = Video.link vid |> Bopt.map Uri.to_string in
+
   Util.exec dbc Q.video
     Video.( (title vid, slug vid, publish_ts)
           , (expires_ts, file_str, md5 vid, width vid)

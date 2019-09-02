@@ -109,15 +109,18 @@ let sources_by_video_id dbc video_id =
 
 let tags_by_name dbc names = 
   let module D = Dynaparam in
-  let (D.Pack (typ, values, plist)) = List.fold_left
+
+  let D.Pack (typ, values, plist) = List.fold_left
     (fun pack name -> D.add Caqti_type.string name "?" pack)
     D.empty names in
   let placeholders = String.concat ", " plist in
+
   let sql = Printf.sprintf 
     "SELECT id, name FROM tag WHERE name IN (%s) LIMIT %d"
     placeholders (List.length names) in
   let query = Caqti_request.collect
     ~oneshot:true typ Caqti_type.(tup2 int string) sql in
+
   Util.collect_list dbc query values
 
 let video dbc id =
