@@ -95,6 +95,9 @@ let new_tags_of dbc lst =
 
 
 let video_tag_relations dbc video_id tag_ids =
+  if BatList.is_empty tag_ids then Lwt.return ()
+  else 
+
   let module D = Dynaparam in
 
   let (D.Pack (typ, values, placeholders)) = List.fold_left

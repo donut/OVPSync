@@ -108,6 +108,9 @@ let sources_by_video_id dbc video_id =
 
 
 let tags_by_name dbc names = 
+  if BatList.is_empty names then Lwt.return []
+  else
+
   let module D = Dynaparam in
 
   let D.Pack (typ, values, plist) = List.fold_left
