@@ -55,8 +55,8 @@ module Q = struct
     "SELECT name, value FROM video_field WHERE video_id = ? ORDER BY name"
 
   let video_tags = Creq.collect
-    int string
-    "SELECT tag.name FROM video_tag \
+    int (tup2 int string)
+    "SELECT tag.id, tag.name FROM video_tag \
        JOIN tag ON tag.id = video_tag.tag_id \
       WHERE video_tag.video_id = ? \
       ORDER BY tag.name"
@@ -126,6 +126,11 @@ let tags_by_name dbc names =
 
   Util.collect_list dbc query values
 
+
+let tags_by_video_id dbc vid_id =
+  Util.collect_list dbc Q.video_tags vid_id
+
+
 let video dbc id =
   match%lwt Util.find_opt dbc Q.video id with
   | None -> Lwt.return None
@@ -147,7 +152,10 @@ let video dbc id =
       |> Uri.pct_decode in
     let thumbnail_uri = Bopt.map Uri.of_string thumbnail in
 
-    let%lwt tags = Util.collect_list dbc Q.video_tags id in
+    let%lwt tags = 
+      let%lwt pairs = tags_by_video_id dbc id in
+      List.map snd pairs |> Lwt.return
+    in
     let%lwt custom = Util.collect_list dbc Q.video_fields id in
     let link = link' >|? Uri.of_string in
 

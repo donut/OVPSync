@@ -1,5 +1,6 @@
 
 open Lwt.Infix
+open Lib.Infix
 
 module type DBC = Caqti_lwt.CONNECTION
 module Bopt = BatOption
@@ -124,6 +125,32 @@ let sources_of_video dbc vid =
 let or_insert_video_fields dbc vid_id fields =
   or_insert_x_fields dbc `Video vid_id fields
 
+
+let video_tag_relations dbc vid_id tag_ids =
+  if BatList.is_empty tag_ids then Lwt.return ()
+  else
+
+  let%lwt existing, removed = 
+    let%lwt old = Select.tags_by_video_id dbc vid_id in
+    old
+    |> List.(partition (fun (o, _) -> tag_ids |> exists ((=) o)))
+    |> Lwt.return
+  in
+
+  let%lwt () =
+    removed
+    |> List.map fst
+    |> Delete.video_tag_relations dbc vid_id
+  in
+
+  let new' = 
+    tag_ids 
+    |> List.(filter (fun n -> not @@ exists (fst %> (=) n) existing))
+  in
+
+  Insert.video_tag_relations dbc vid_id new'
+
+
 let video dbc vid =
   let canonical = Video.canonical vid in
 
@@ -139,7 +166,13 @@ let video dbc vid =
 
   let Video.{ canonical; tags; _ } = vid in
 
-  Insert.new_tags_of dbc tags >>= fun () ->
+  let%lwt () = 
+    (* Update tags. *)
+    let%lwt () = Insert.new_tags_of dbc tags in
+    let%lwt tags = Select.tags_by_name dbc tags in
+    let ids = tags |> List.map fst in
+    video_tag_relations dbc vid_id ids
+  in
 
   let fields = Video.custom vid in
   let field_names = fields |> List.map fst in

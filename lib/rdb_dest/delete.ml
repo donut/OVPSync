@@ -61,5 +61,28 @@ let source_fields_not_named dbc src_id names =
 let source_field dbc source_id name =
   Util.exec dbc Q.source_field (source_id, name)
 
+
+let video_tag_relations dbc vid_id tag_ids =
+  if BatList.is_empty tag_ids then Lwt.return ()
+  else
+
+  let module D = Dynaparam in
+
+  let D.Pack (typ, vals, placeholders) = List.fold_left
+    (fun pack tag_id -> D.add Caqti_type.int tag_id "?" pack)
+    D.empty tag_ids in
+    
+  let typ = Caqti_type.(tup3 int typ int) in
+  let vals = (vid_id, vals, List.length tag_ids) in
+  let placeholders = String.concat ", " placeholders in
+
+  let sql = Printf.sprintf
+    "DELETE FROM video_tag WHERE video_id = ? AND tag_id IN (%s) LIMIT ?"
+    placeholders in
+  let query = Caqti_request.exec ~oneshot:true typ sql in
+
+  Util.exec dbc query vals
+
+
 let video_fields_not_named dbc vid_id names =
   x_fields_not_named dbc `Video vid_id names
