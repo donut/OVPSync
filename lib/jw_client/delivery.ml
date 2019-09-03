@@ -33,6 +33,7 @@ let get_media media_id ?params () =
   | false, `Not_found -> Lwt.return None
   | false,          _ ->
     Exn.unexpected_response_status ~path ?params ~resp ~body () >>= raise
+
   | true,           _ -> 
     Clwt.Body.to_string body >|= fun body ->
     Some (V2_media_body_j.t_of_string body)

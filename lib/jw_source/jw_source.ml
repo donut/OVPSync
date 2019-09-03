@@ -521,21 +521,23 @@ struct
                 [match !videos_to_check with ...] section with [try] *)
         failed_requests := (meth, uri, "timed out") :: !failed_requests;
         try_next ()
-      | Jw_client.Exn.Unexpected_response_status (status, headers, body) ->
+
+      | Jw_client.Exn.Unexpected_response_status (method', path, response) ->
         stop_flag := true;
         Log.fatalf
           "Unexpected HTTP response\n\
-            --> Status: %s\n\n\
-            --> Headers <--\n%s\n\n\
-            --> Body <--\n%s\n"
-          status headers body >>= fun () ->
+            --> Request: [%s %s]\n\n\
+            --> Response <--\n%s\n\n"
+          method' path response >>= fun () ->
         log_request_failures !failed_requests >>= fun () ->
         Lwt.return None
+
       | Jw_client.Exn.Temporary_error (meth, uri, exn) ->
         Log.warnf "Temporary error making request [%s %s]: %s"
           meth uri exn >>= fun () ->
         failed_requests := (meth, uri, exn) :: !failed_requests;
         try_next ()
+
       | exn ->
         stop_flag := true;
         Log.fatalf ~exn "Unexpected error" >>= fun () ->
