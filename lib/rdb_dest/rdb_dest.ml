@@ -381,7 +381,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
 
     match Video.id t with
     | Some vid_id -> 
-      Log.infof "[%s] Already exists as [%d]. Updating."
+      Log.infof "[%s] Already exists as [%d]. Updating..."
         media_id vid_id >>= fun () ->
       save_existing dbc vid_id t
 

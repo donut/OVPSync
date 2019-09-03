@@ -186,7 +186,7 @@ struct
         Lwt.return prev_changes
 
       | false, Some _ ->
-        let%lwt () = Log.debugf "[%s] Not published; publishing..." vid.key in
+        let%lwt () = Log.infof "[%s] Not published; publishing..." vid.key in
 
         let changes = { prev_changes with expires = vid.expires_date } in
         let%lwt () = set_changed vid.key changes in
@@ -222,13 +222,13 @@ struct
       end >>= fun needs_passthrough ->
 
       if needs_passthrough then
-        Log.debugf "[%s] No passthrough; creating..." vid.key
+        Log.infof "[%s] No passthrough; creating..." vid.key
           >>= fun () ->
         let changes' = { changes with passthrough = true } in
         set_changed vid.key changes' >>= fun () ->
         add_passthroug_conversion vid.key
       else
-        Log.debugf "[%s] Waiting on passthrough." vid.key
+        Log.infof "[%s] Waiting on passthrough." vid.key
     end
 
 
