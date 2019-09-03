@@ -303,11 +303,12 @@ struct
 
   let final_cleanup () = cleanup_old_changes ~exclude:[] ()
 
-  (* [clear_temp_changes_for_return ?changed vid] Makes sure any changes to
-     [vid] that are just to facilitate the sync process are not actually
-     synced to the destination.  *)
+  (** [clear_temp_changes_for_return ?changed vid] Makes sure any changes to
+      [vid] that are just to facilitate the sync process are not actually
+      synced to the destination.  *)
   let clear_temp_changes_for_return ?changed (vid : videos_video) =
-    let%lwt { expires; _ } = match changed with 
+    let%lwt { expires; _ } =
+      match changed with 
       | None -> get_changed vid.key
       | Some c -> Lwt.return c 
     in
@@ -454,6 +455,7 @@ struct
           let%lwt v = clear_temp_changes_for_return vid in
           should_sync (v, None, None)
         in
+
         match sync_needed, vid.status, vid.sourcetype with
         | false, _, _ ->
           Log.infof "[%s] No need to sync. NEXT!" vid.key >>= fun () ->
@@ -492,6 +494,7 @@ struct
               Log.infof "[%s] Looks like this video no longer exists. NEXT!"
                 vid.key >>= fun () ->
               next ()
+
             | () ->
               Log.debugf "[%s] Adding to processing list. NEXT!" vid.key
                 >>= fun () ->

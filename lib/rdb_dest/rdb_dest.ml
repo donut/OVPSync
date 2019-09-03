@@ -117,8 +117,8 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
     Lwt_unix.rename old_abs_path new_abs_path >>= fun () ->
 
     let vid_id = Video.id t |> Bopt.get in
-    Update.video_file_uri dbc vid_id new_uri >|= fun () ->
-    { t with file_uri = Some (Uri.of_string new_uri) }
+    let%lwt () = Update.video_file_uri dbc vid_id (Some new_uri) in
+    Lwt.return { t with file_uri = Some (Uri.of_string new_uri) }
 
 
   let save_thumb_file 
@@ -139,8 +139,8 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
       end
     | _ ->
       let local_path = make_local_uri rel_path filename in
-      Update.video_thumbnail_uri dbc vid_id local_path >|= fun () ->
-      Ok (Uri.of_string local_path)
+      let%lwt () = Update.video_thumbnail_uri dbc vid_id (Some local_path) in
+      Lwt.return @@ Ok (Uri.of_string local_path)
 
 
   let save_video_file 
@@ -159,9 +159,10 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
         File.unlink_if_exists file_path >|= fun () ->
         Error exn
       end
+
     | _ ->
       let local_path = make_local_uri rel_path filename in
-      Update.video_file_uri dbc vid_id local_path >>= fun () ->
+      Update.video_file_uri dbc vid_id (Some local_path) >>= fun () ->
       let md5 = File.md5 file_path in
       Update.video_md5 dbc vid_id md5 >|= fun () ->
       let file_uri = Uri.of_string local_path in
@@ -229,7 +230,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
 
   let rm_old_file_if_renamed ~old ~new_ =
     match old with
-    | Some old when old <> new_ && is_uri_local old ->
+    | Some old when old <> new_ && is_local_uri old ->
       Log.debugf "--> Removing old file at [%s]" (Uri.to_string old)
         >>= fun () ->
       File.unlink_if_exists @@ abs_path_of_uri old
@@ -237,44 +238,73 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
 
   
   let update_thumbnail dbc t ~old_t ~new_t =
-    let media_id = media_id_of_video t in
-    let abs_path, rel_path, basename = gen_file_paths new_t in
-    File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
+    let vid_id = Video.id t |> Bopt.get in
 
     match Video.thumbnail_uri new_t with
-    | None -> Lwt.return t
-    | Some uri -> begin
-      let ext = spf "%s.temp" (thumb_ext new_t) in
-      Log.infof "[%s] Downloading thumbnail to [%s/%s.%s]"
-        media_id rel_path basename ext >>= fun () ->
+    | None ->
+      begin match Video.thumbnail_uri old_t with
+      | None -> Lwt.return t
+      | Some uri when is_local_uri uri -> Lwt.return t
+      | Some _ ->
+        let%lwt () = Update.video_thumbnail_uri dbc vid_id None in
+        Lwt.return { t with thumbnail_uri = None }
+      end
 
-      let vid_id = Video.id t |> Bopt.get in
+    | Some uri -> begin
+      let media_id = media_id_of_video t in
+      let abs_path, rel_path, basename = gen_file_paths new_t in
+      let%lwt _ = File.prepare_dir ~prefix:Conf.files_path rel_path in
+
+      let ext = spf "%s.temp" (thumb_ext new_t) in
+      let%lwt () = Log.infof
+        "[%s] Downloading thumbnail to [%s/%s.%s]"
+        media_id rel_path basename ext in
+
       let%lwt result = save_thumb_file
         dbc ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext 
       in
+
       match result with
       | Error _ -> Lwt.return t
+
       | Ok uri ->
-        Log.debugf "[%s] Moving thumbnail to permanent location." media_id
-          >>= fun () ->
+        let%lwt () = Log.debugf
+          "[%s] Moving thumbnail to permanent location." media_id in
         let%lwt uri = move_temp_file uri in
-        Update.video_thumbnail_uri dbc vid_id (Uri.to_string uri) >>= fun () ->
+        
+        let%lwt () =
+          let str = Uri.to_string uri in
+          Update.video_thumbnail_uri dbc vid_id (Some str)
+        in
+
         (* Delete old image if it was named differently, otherwise it
-            would have been replaced in the move .temp move. *)
-        rm_old_file_if_renamed ~old:(Video.thumbnail_uri old_t) ~new_:uri
-          >|= fun () ->
-        { t with thumbnail_uri = Some uri }
+           would have been replaced in the move .temp move. *)
+        let%lwt () = 
+          rm_old_file_if_renamed ~old:(Video.thumbnail_uri old_t) ~new_:uri
+        in
+
+        Lwt.return { t with thumbnail_uri = Some uri }
     end
 
 
   let update_video_file dbc t ~old_t ~new_t =
-    let media_id = media_id_of_video t in
-    let abs_path, rel_path, basename = gen_file_paths new_t in
-    File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
+    let vid_id = Video.id t |> Bopt.get in
 
     match Video.file_uri new_t with
-    | None -> Lwt.return t
+    | None ->
+      begin match Video.file_uri old_t with
+      | None -> Lwt.return t
+      | Some uri when is_local_uri uri -> Lwt.return t
+      | Some _ ->
+        let%lwt () = Update.video_file_uri dbc vid_id None in
+        Lwt.return { t with file_uri = None }
+      end
+
     | Some uri -> begin
+      let media_id = media_id_of_video t in
+      let abs_path, rel_path, basename = gen_file_paths new_t in
+      File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
+
       if Video.md5 new_t = Video.md5 old_t
         && Video.file_uri old_t >|? is_local_uri =?: false
       then maybe_update_video_file_path dbc t new_t
@@ -284,7 +314,6 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
       Log.infof "[%s] Downloading video to [%s/%s.%s]"
         media_id rel_path basename ext >>= fun () ->
       
-      let vid_id = Video.id t |> Bopt.get in
       let%lwt result = save_video_file
         dbc ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
       in
@@ -293,11 +322,16 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
       | Ok (temp_uri, md5) ->
         Log.debugf "[%s] Moving video to permanent location." media_id
           >>= fun () ->
+
         let%lwt uri = move_temp_file temp_uri in
-        Update.video_file_uri dbc vid_id (Uri.to_string uri)
-          >>= fun () ->
+        let%lwt () =
+          let str = Uri.to_string uri in
+          Update.video_file_uri dbc vid_id (Some str)
+        in
+
         rm_old_file_if_renamed ~old:(Video.file_uri old_t) ~new_:uri
           >|= fun () ->
+
         { t with file_uri = Some uri; md5 = Some md5 }
     end
 

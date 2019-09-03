@@ -39,11 +39,11 @@ module Q = struct
      WHERE id = ? LIMIT 1"
 
   let video_thumbnail_uri = Creq.exec
-    (tup2 string int)
+    (tup2 (option string) int)
     "UPDATE video SET thumbnail_uri = ? WHERE id = ? LIMIT 1"
 
   let video_file_uri = Creq.exec
-    (tup2 string int)
+    (tup2 (option string) int)
     "UPDATE video SET file_uri = ? WHERE id = ? LIMIT 1"
     
   let video_md5 = Creq.exec
