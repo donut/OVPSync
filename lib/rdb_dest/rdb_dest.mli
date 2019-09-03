@@ -3,8 +3,8 @@ module Client = Client
 module Video = Video
 module Source = Source
 
-(* [is_uri_local uri] checks if [uri] looks to be a local or not. *)
-val is_uri_local : Uri.t -> bool
+(* [is_local_uri uri] checks if [uri] looks to be a local or not. *)
+val is_local_uri : Uri.t -> bool
 
 module type Config = sig
   val db_pool : (Caqti_lwt.connection, Caqti_error.t) Caqti_lwt.Pool.t

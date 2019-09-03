@@ -60,7 +60,7 @@ let saveable_uri_field run name ~old ~new' =
     (* URIs are not compared if the old URI is local. If it's not local, 
       it implies that either no URI was previously provided or there was a
       failure saving the file. *)
-    let old_is_local = old >|? Rdb_dest.is_uri_local =?: false in
+    let old_is_local = old >|? Rdb_dest.is_local_uri =?: false in
 
       not old_is_local 
       (* If file was not saved previously, unless URI was always [None],

@@ -27,7 +27,7 @@ let make_local_uri rel_path filename =
   spf "%s:///%s/%s" local_scheme rel_path filename
 
 
-let is_uri_local uri =
+let is_local_uri uri =
   Uri.scheme uri |> (=) (Some local_scheme)
 
 
@@ -276,7 +276,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
     | None -> Lwt.return t
     | Some uri -> begin
       if Video.md5 new_t = Video.md5 old_t
-        && Video.file_uri old_t >|? is_uri_local =?: false
+        && Video.file_uri old_t >|? is_local_uri =?: false
       then maybe_update_video_file_path dbc t new_t
       else
 
