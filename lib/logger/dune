@@ -1,3 +1,7 @@
 (library
  (name logger)
- (libraries batteries lwt lwt.unix))
+ (libraries 
+  lib
+  batteries lwt lwt.unix)
+ (preprocess
+  (pps lwt_ppx ppx_inline_test)))

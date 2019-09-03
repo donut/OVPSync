@@ -1,5 +1,7 @@
 
 open Printf
+open Lib.Infix
+
 
 module Level = struct
   type t = 
@@ -39,6 +41,7 @@ module Level = struct
     BatInt.compare (to_int a) (to_int b)
 end
 
+
 module type Sig = sig
   val level : Level.t
 
@@ -58,36 +61,61 @@ module type Sig = sig
   val tracef : ('a, unit, string, unit Lwt.t) format4 -> 'a
 end
 
+
+let last_entry = ref None
+
+
 module type Config = sig
   val prefix : string
   val level : Level.t
 end
 
+
 module Make (Conf : Config) : Sig = struct
   let level = Conf.level
 
-  let datetime () =
-    let { Unix.tm_year=yr; tm_mon=mon; tm_mday=day;
-          tm_hour=hr; tm_min=min; tm_sec=sec; _ }
-      = Unix.time () |> Unix.localtime
-    in
-    sprintf "%4d/%02d/%02d %2d:%02d:%02d" (yr + 1900) (mon + 1) day hr min sec
+
+  let date_string_of_timestamp ts =
+    let { Unix.tm_year=yr; tm_mon=mon; tm_mday=day; _ } = Unix.localtime ts in
+    sprintf "%4d/%02d/%02d" (yr + 1900) (mon + 1) day
+
+
+  let time_string_of_timestamp ts =
+    let { Unix. tm_hour=hr; tm_min=min; tm_sec=sec; _ } = Unix.localtime ts in
+    sprintf "%2d:%02d:%02d" hr min sec
+
 
   let log (level : Level.t) message =
-    if Level.compare Conf.level level < 0 then
-      Lwt.return ()
+    if Level.compare Conf.level level < 0 then Lwt.return ()
     else
-      let datetime = datetime () in
-      let lvl = Level.to_symbol level in
-      Lwt_io.printlf "%s %s %s  %s" datetime Conf.prefix lvl message
+    let now = Unix.time () in
+
+    let%lwt () = 
+      if (now -. (!last_entry =?: 0.)) > (24. *. 60. *. 60.) then
+        let date = date_string_of_timestamp now in
+        let separator = "##################################################" in
+        Lwt_io.printlf
+          "%s\n                    %s                    \n%s"
+          separator date separator
+      else
+        Lwt.return ()
+    in
+    let () = last_entry := Some now in
+
+    let time = time_string_of_timestamp now in
+    let lvl = Level.to_symbol level in
+    Lwt_io.printlf "%s %s %s  %s" time Conf.prefix lvl message
+
 
   let logf (level : Level.t) fmt =
     ksprintf (log level) fmt
+
 
   let add_exn_to_message exn message =
     message ^ match exn with
     | None -> ""
     | Some e -> " Exception: " ^ (Printexc.to_string e)
+
 
   let fatal ?exn message =
     log `Fatal (add_exn_to_message exn message)
