@@ -57,19 +57,24 @@ struct
        exceptions. *)
     let stop_flag = ref false in
     let should_sync, max_concurrency = Conf.(should_sync, max_threads) in
+
     let stream = Src.make_stream ~should_sync ~stop_flag in
     (* Limit the number of threads to avoid [Unix.EINVAL] exceptions.
        @see https://github.com/ocsigen/lwt/issues/222 *)
+
     stream |> Lwt_stream.iter_n ~max_concurrency begin fun src_item ->
-      begin try%lwt
-        let%lwt dest_item = Conf.dest_t_of_src_t src_item in
-        Dest.save dest_item >|= ignore
-      with | exn ->
-        Log.fatal ~exn "Failed saving item to destination. STOPPING!"
-          >|= fun () ->
-        stop_flag := true;
-        ()
-      end >>= fun () ->
+      let%lwt () = begin
+        try%lwt
+          let%lwt dest_item = Conf.dest_t_of_src_t src_item in
+          Dest.save dest_item >|= ignore
+
+        with | exn ->
+          let%lwt () = Log.fatal ~exn
+            "Failed saving item to destination. STOPPING!" in
+          stop_flag := true;
+          Lwt.return ()
+      end in
+
       try%lwt Src.cleanup src_item with
       | exn -> Log.error ~exn "Failed cleaning up item."
     end >>= fun () ->

@@ -199,8 +199,10 @@ let video dbc vid =
 let video_thumbnail_uri dbc vid_id uri =
   Util.exec dbc Q.video_thumbnail_uri (uri, vid_id)
 
+
 let video_file_uri dbc vid_id uri =
   Util.exec dbc Q.video_file_uri (uri, vid_id)
+
 
 let video_md5 dbc vid_id md5 =
   Util.exec dbc Q.video_md5 (md5, vid_id)
