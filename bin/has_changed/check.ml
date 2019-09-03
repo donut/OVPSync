@@ -5,21 +5,20 @@ module Blist = BatList
 
 
 type ('value, 'result) runner 
-   = name:string 
-  -> has_changed:('value -> 'value -> bool)
+   = has_changed:('value -> 'value -> bool)
   -> to_log:('value -> 'value -> string)
   -> 'value
   -> 'value
   -> 'result
 
 
-let test__run ~name:_ ~has_changed ~to_log:_ a b = has_changed a b
+let test__run ~has_changed ~to_log:_ a b = has_changed a b
 
 
 let int_field run name ~old ~new' =
   let to_log old new' = 
     Printf.sprintf "%s changed from [%d] to [%d]" name old new' in
-  run ~name ~has_changed:(<>) ~to_log old new' 
+  run ~has_changed:(<>) ~to_log old new' 
 
 
 let%test "int_field no change" =
@@ -37,7 +36,7 @@ let uri_field run name ~old ~new' =
       name (Uri.to_string old) (Uri.to_string new')
   in
 
-  run ~name ~has_changed ~to_log old new'
+  run ~has_changed ~to_log old new'
 
 
 let%test "uri_field no change" =
@@ -68,13 +67,10 @@ let saveable_uri_field run name ~old ~new' =
       && not (old = None && new' = None)
   in
 
-  let to_log old new' = 
-    let str a = a >|? Uri.to_string =?: "`None`" in
-    Printf.sprintf 
-      "%s changed from [%s] to [%s]" name (str old) (str new')
-  in
+  let to_log _old _new' = 
+    Printf.sprintf "%s has not been downloaded previously." name in
     
-  run ~name ~has_changed ~to_log old new'
+  run ~has_changed ~to_log old new'
 
 
 let%test "saveable_uri_field with local old URI" =
@@ -111,7 +107,7 @@ let%test "saveable_uri_field with remote but different old & new URIs" =
 let string_field run name ~old ~new' =
   let to_log old new' = 
     Printf.sprintf "%s changed from [%s] to [%s]" name old new' in
-  run ~name ~has_changed:(<>) ~to_log old new' 
+  run ~has_changed:(<>) ~to_log old new' 
 
 
 let%test "string_field no change" =
@@ -121,7 +117,7 @@ let%test "string_field has change" =
   string_field test__run "" ~old:"not" ~new':"same" = true
 
 
-let list_field run name ~to_log a b =
+let list_field run ~to_log a b =
   let rec has_changed a b =
     if List.compare_lengths a b <> 0 then true
     else
@@ -133,7 +129,7 @@ let list_field run name ~to_log a b =
       has_changed (filter tl) (filter b)
   in
 
-  run ~name ~has_changed ~to_log a b
+  run ~has_changed ~to_log a b
 
 
 let string_list_field run name ~old ~new' =
@@ -143,7 +139,7 @@ let string_list_field run name ~old ~new' =
       name (str old) (str new')
   in
 
-  list_field run name ~to_log old new'
+  list_field run ~to_log old new'
 
 
 let%test "string_list_field no change" =
@@ -167,7 +163,7 @@ let string_pair_list_field run name ~old ~new' =
       name (str old) (str new')
   in
 
-  list_field run name ~to_log old new'
+  list_field run ~to_log old new'
 
 
 let%test "string_pair_list_field no change" =
@@ -211,7 +207,7 @@ let source_list_field_to_log name old new' =
 
 let source_field run name ~old ~new' =
   let to_log old new' = source_list_field_to_log name [old] [new'] in
-  run ~name ~has_changed:source_field_has_changed ~to_log old new'
+  run ~has_changed:source_field_has_changed ~to_log old new'
 
 
 let source_list_field run name ~old ~new' =
@@ -228,7 +224,7 @@ let source_list_field run name ~old ~new' =
 
   let to_log = source_list_field_to_log name in
 
-  run ~name ~has_changed ~to_log old new'
+  run ~has_changed ~to_log old new'
 
 
 let%test_module "source_field" = (module struct
@@ -337,7 +333,7 @@ let optional
       Printf.sprintf "%s changed from [`%s`] to [`%s`]" name (str a) (str b)
     in
 
-    run ~name ~has_changed ~to_log old new'
+    run ~has_changed ~to_log old new'
 
 
 

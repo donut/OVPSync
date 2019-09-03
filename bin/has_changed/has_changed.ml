@@ -6,11 +6,10 @@ let video (module Log : Logger.Sig) ~check_md5 old new' =
   let module C = Check.Make (struct
     type result = bool Lwt.t
 
-    let runner ~name ~has_changed ~to_log a b : bool Lwt.t =  
+    let runner ~has_changed ~to_log a b : bool Lwt.t =  
       if has_changed a b then
         let log_id = old.canonical.media_id in
-        let%lwt () = Log.debugf "[%s] %s has changed." log_id name in
-        let%lwt () = Log.tracef "[%s] %s." log_id (to_log a b) in
+        let%lwt () = Log.infof "[%s] %s." log_id (to_log a b) in
         Lwt.return true
 
       else Lwt.return false

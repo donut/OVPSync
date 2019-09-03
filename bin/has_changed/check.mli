@@ -1,7 +1,6 @@
 
 type ('value, 'result) runner 
-   = name:string 
-  -> has_changed:('value -> 'value -> bool)
+   = has_changed:('value -> 'value -> bool)
   -> to_log:('value -> 'value -> string)
   -> 'value
   -> 'value
