@@ -63,6 +63,12 @@ stop: .env
 	$(dc) stop $(s)
 
 
+.PHONY: rebuild-app-service
+rebuild-app-service: .env _env/mysql-dump.sql _data/app _data/db/data
+	$(MAKE) docker-images s=app
+	$(MAKE) restart s=app
+
+
 .PHONY: tear-it-all-down
 tear-it-all-down:
 	@echo "### Tearing it all down... ###"
