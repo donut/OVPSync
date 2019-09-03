@@ -173,22 +173,27 @@ struct
     let%lwt prev_changes = get_changed vid.key in
     let now = Unix.time () |> int_of_float in
 
-    begin match published, vid.expires_date with
-    | true, _ -> Lwt.return prev_changes
-    | false, None ->
-      Log.debugf "[%s] Waiting on publish." vid.key >>= fun () ->
-      Lwt.return prev_changes
-    | false, Some e when e > now ->
-      Log.debugf "[%s] Waiting on publish." vid.key >>= fun () ->
-      Lwt.return prev_changes
-    | false, Some _ ->
-      Log.debugf "[%s] Not published; publishing..." vid.key >>= fun () ->
-      let changes =
-        { prev_changes with expires = vid.expires_date } in
-      set_changed vid.key changes >>= fun () ->
-      publish_video vid >>= fun () ->
-      Lwt.return changes
-    end >>= fun changes ->
+    let%lwt changes = 
+      match published, vid.expires_date with
+      | true, _ -> Lwt.return prev_changes
+
+      | false, None ->
+        let%lwt () = Log.infof "[%s] Waiting on publish." vid.key in
+        Lwt.return prev_changes
+
+      | false, Some e when e > now ->
+        let%lwt () = Log.infof "[%s] Waiting on publish." vid.key in
+        Lwt.return prev_changes
+
+      | false, Some _ ->
+        let%lwt () = Log.debugf "[%s] Not published; publishing..." vid.key in
+
+        let changes = { prev_changes with expires = vid.expires_date } in
+        let%lwt () = set_changed vid.key changes in
+        let%lwt () = publish_video vid in
+
+        Lwt.return changes
+    in
 
     begin match passthrough with
     | Some _ -> Lwt.return ()
@@ -206,7 +211,7 @@ struct
         | Some { status = `Failed; key; _ } ->
           (* @todo Deal with passthrough conversions that fail every time.
                    This has the potential to infinitely loop. *)
-          Log.errorf "[%s] Passthrough conversion creation failed"  
+          Log.errorf "[%s] Passthrough conversion creation failed."  
             vid.key >>= fun () ->
           Client.videos_conversions_delete key >>= fun () ->
           Lwt.return true
