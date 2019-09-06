@@ -14,7 +14,7 @@ module type Made = sig
 
   val make_stream
     : should_sync:(t -> bool Lwt.t) -> stop_flag:(bool ref) -> t Lwt_stream.t
-  val cleanup : t -> unit Lwt.t
+  val cleanup : t -> (unit, exn) Lwt_result.t
   val final_cleanup : unit -> unit Lwt.t
 end
 
