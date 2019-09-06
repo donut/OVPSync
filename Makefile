@@ -66,7 +66,8 @@ stop: .env
 .PHONY: rebuild-app-service
 rebuild-app-service: .env _env/mysql-dump.sql _data/app _data/db/data
 	$(MAKE) docker-images s=app
-	$(MAKE) restart s=app
+	$(MAKE) stop s=app
+	$(MAKE) start-detached s=app
 
 
 .PHONY: tear-it-all-down
