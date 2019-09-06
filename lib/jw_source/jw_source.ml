@@ -379,12 +379,14 @@ struct
         (* Check for new videos at the current offset in case more were 
            added (or some removed, pushing more into the current offset) in 
            the time it took to process the current set *)
-        let%lwt refreshed = match !current_videos_set with
-        (* First set, no need to refresh *)
-        | [] -> Lwt.return ([], []) 
-        (* Since [videos_to_check] and [processing_videos] are empty, we can
-           assume that all videos in [current_videos_set] have been returned. *)
-        | returned -> refresh_current_videos_set ~returned
+        let%lwt refreshed =
+          match !current_videos_set with
+          (* First set, no need to refresh *)
+          | [] -> Lwt.return ([], []) 
+          (* Since [videos_to_check] and [processing_videos] are empty, we can
+             assume that all videos in [current_videos_set] have been returned.
+             *)
+          | returned -> refresh_current_videos_set ~returned
         in
 
         begin match refreshed with

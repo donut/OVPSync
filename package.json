@@ -11,6 +11,7 @@
   "scripts": { "doc": "esy dune build @doc" },
   "dependencies": {
     "@opam/atdgen": "2.0.0",
+    "@opam/base": "v0.12.2",
     "@opam/batteries": "2.9.0",
     "@opam/caqti": "1.1.0",
     "@opam/caqti-driver-mariadb": "1.1.0",
@@ -23,6 +24,7 @@
     "@opam/lwt_ppx": "1.2.2",
     "@opam/lwt_ssl": "1.1.2",
     "@opam/ppx_inline_test": "v0.12.0",
+    "@opam/ppx_let": "v0.12.0",
     "@opam/sha": "1.12",
     "@opam/tls": "0.10.2",
     "ocaml": "4.7.x",

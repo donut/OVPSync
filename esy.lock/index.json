@@ -1,5 +1,5 @@
 {
-  "checksum": "8eeff36cea52205d7ab26ed59f0a0915",
+  "checksum": "e71119bdbb6cd44169b70302fc3e8dfe",
   "root": "ovpsync@link-dev:./package.json",
   "node": {
     "yarn-pkg-config@github:esy-ocaml/yarn-pkg-config#cca65f99674ed2d954d28788edeb8c57fada5ed0@d41d8cd9": {
@@ -51,6 +51,7 @@
       "dependencies": [
         "refmterr@3.2.2@d41d8cd9", "ocaml@4.7.1004@d41d8cd9",
         "@opam/tls@opam:0.10.2@8580f212", "@opam/sha@opam:1.12@ce997098",
+        "@opam/ppx_let@opam:v0.12.0@b52d29f3",
         "@opam/ppx_inline_test@opam:v0.12.0@f31e9c76",
         "@opam/lwt_ssl@opam:1.1.2@ac833920",
         "@opam/lwt_ppx@opam:1.2.2@ee59a0be", "@opam/lwt@opam:4.2.1@08ba7e51",
@@ -62,11 +63,12 @@
         "@opam/caqti-driver-mariadb@opam:1.1.0@ff8ca106",
         "@opam/caqti@opam:1.1.0@7b7c5b35",
         "@opam/batteries@opam:2.9.0@78c88ae4",
+        "@opam/base@opam:v0.12.2@4eee02b5",
         "@opam/atdgen@opam:2.0.0@5d912e07"
       ],
       "devDependencies": [
-        "ocaml@4.7.1004@d41d8cd9", "@opam/utop@opam:2.4.1@22a7327f",
-        "@opam/odoc@opam:1.4.1@becd49d1", "@opam/merlin@opam:3.3.2@7a364181"
+        "ocaml@4.7.1004@d41d8cd9", "@opam/utop@opam:2.4.1@b6b4c19e",
+        "@opam/odoc@opam:1.4.1@7b0020a6", "@opam/merlin@opam:3.3.2@7a364181"
       ]
     },
     "ocaml@4.7.1004@d41d8cd9": {
@@ -295,8 +297,8 @@
         "ocaml@4.7.1004@d41d8cd9", "@opam/uchar@opam:0.0.2@c8218eea"
       ]
     },
-    "@opam/utop@opam:2.4.1@22a7327f": {
-      "id": "@opam/utop@opam:2.4.1@22a7327f",
+    "@opam/utop@opam:2.4.1@b6b4c19e": {
+      "id": "@opam/utop@opam:2.4.1@b6b4c19e",
       "name": "@opam/utop",
       "version": "opam:2.4.1",
       "source": {
@@ -938,6 +940,33 @@
         "@opam/base@opam:v0.12.2@4eee02b5"
       ]
     },
+    "@opam/ppx_let@opam:v0.12.0@b52d29f3": {
+      "id": "@opam/ppx_let@opam:v0.12.0@b52d29f3",
+      "name": "@opam/ppx_let",
+      "version": "opam:v0.12.0",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/md5/8e/8ebaa03cb252e29c3152cf32e5769e83#md5:8ebaa03cb252e29c3152cf32e5769e83",
+          "archive:https://ocaml.janestreet.com/ocaml-core/v0.12/files/ppx_let-v0.12.0.tar.gz#md5:8ebaa03cb252e29c3152cf32e5769e83"
+        ],
+        "opam": {
+          "name": "ppx_let",
+          "version": "v0.12.0",
+          "path": "esy.lock/opam/ppx_let.v0.12.0"
+        }
+      },
+      "overrides": [],
+      "dependencies": [
+        "ocaml@4.7.1004@d41d8cd9", "@opam/ppxlib@opam:0.8.1@67aec471",
+        "@opam/dune@opam:1.9.3@b2ba03d2", "@opam/base@opam:v0.12.2@4eee02b5",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.7.1004@d41d8cd9", "@opam/ppxlib@opam:0.8.1@67aec471",
+        "@opam/dune@opam:1.9.3@b2ba03d2", "@opam/base@opam:v0.12.2@4eee02b5"
+      ]
+    },
     "@opam/ppx_inline_test@opam:v0.12.0@f31e9c76": {
       "id": "@opam/ppx_inline_test@opam:v0.12.0@f31e9c76",
       "name": "@opam/ppx_inline_test",
@@ -1112,8 +1141,8 @@
         "@opam/dune@opam:1.9.3@b2ba03d2", "@opam/base@opam:v0.12.2@4eee02b5"
       ]
     },
-    "@opam/odoc@opam:1.4.1@becd49d1": {
-      "id": "@opam/odoc@opam:1.4.1@becd49d1",
+    "@opam/odoc@opam:1.4.1@7b0020a6": {
+      "id": "@opam/odoc@opam:1.4.1@7b0020a6",
       "name": "@opam/odoc",
       "version": "opam:1.4.1",
       "source": {
