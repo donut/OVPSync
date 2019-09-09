@@ -2,7 +2,7 @@
  (name main)
  (libraries
    has_changed
-   lib logger jw_client jw_source rdb_dest sync variable_store
+   config lib logger jw_client jw_source rdb_dest sync variable_store
    batteries caqti caqti-lwt caqti-driver-mariadb lwt re re.perl)
  (preprocess
   (pps lwt_ppx)))

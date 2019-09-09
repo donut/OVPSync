@@ -1,5 +1,5 @@
 
 (library
- (name common)
+ (name lib)
  (libraries base lwt)
  (preprocess (pps lwt_ppx ppx_let)))

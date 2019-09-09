@@ -10,13 +10,13 @@ type v2_media_body = V2_media_body_t.t
 
 val get 
    : string -> ?params:(string * string list) list -> unit
-  -> (Cohttp.Response.t * Cohttp_lwt.Body.t, exn) Common.Lwt_result.t
+  -> (Cohttp.Response.t * Cohttp_lwt.Body.t, exn) Lib.Lwt_result.t
 (** [get path ?params ()] makes a GET request to the JW Delivery API endpoint
     specified by [path]. *)
 
 val get_media
    : string -> ?params:(string * string list) list -> unit
-  -> (v2_media_body option, exn) Common.Lwt_result.t
+  -> (v2_media_body option, exn) Lib.Lwt_result.t
 (** [get_media media_id ?params ()] returns the response from the [/v2/media] 
     endpoint for the given [media_id].
     

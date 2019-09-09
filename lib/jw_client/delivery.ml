@@ -3,13 +3,13 @@
 open Exn
 open Base
 open Lwt.Infix
-open Common.Lwt_result.Just_let_syntax
+open Lib.Lwt_result.Just_let_syntax
 
 
 module C = Cohttp
 module Clwt = Cohttp_lwt
 module Clu = Cohttp_lwt_unix
-module Lwt_result = Common.Lwt_result
+module Lwt_result = Lib.Lwt_result
 
 
 type v2_media_body = V2_media_body_t.t

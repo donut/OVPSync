@@ -3,11 +3,11 @@ open Base
 open Printf
 open Lwt.Infix
 
-open Common.Infix.Function
-open Common.Infix.Option
-open Common.Lwt_result.Just_let_syntax
+open Lib.Infix.Function
+open Lib.Infix.Option
+open Lib.Lwt_result.Just_let_syntax
 
-module Lwt_result = Common.Lwt_result
+module Lwt_result = Lib.Lwt_result
 
 
 module Modified = struct

@@ -1,7 +1,7 @@
 (library
  (name jw_source)
  (libraries 
-  jw_client common logger sync
+  jw_client lib logger sync
   base lwt)
  (preprocess
   (pps ppx_sexp_conv lwt_ppx ppx_let)))

@@ -3,7 +3,6 @@ open Lwt.Infix
 
 open Sync_conf
 
-module Conf = Lib.Conf
 module Blist = BatList
 module Bopt = BatOption
 module Bstr = BatString
@@ -20,10 +19,10 @@ let main () =
         raise @@ Unexpected_arguments
           ("The config path must be the only argument.", args)
     in
-    Conf.read_config path
+    Config.read_config path
   in
 
-  let get_log_level = Conf.log_level conf in
+  let get_log_level = Config.log_level conf in
 
   Lwt_io.printl "Good morning, Starshine. The Earth says, \"Hello!\""
   >>= fun () ->
