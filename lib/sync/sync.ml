@@ -16,7 +16,7 @@ module type Source = sig
 
   val make_stream
     : should_sync:(t -> bool Lwt.t) -> stop_flag:(bool ref) -> t Lwt_stream.t
-  val cleanup : t -> unit Lwt.t
+  val cleanup : t -> (unit, exn) Lib.Lwt_result.t
   val final_cleanup : unit -> unit Lwt.t
 end
 
@@ -62,33 +62,41 @@ struct
     (* Limit the number of threads to avoid [Unix.EINVAL] exceptions.
        @see https://github.com/ocsigen/lwt/issues/222 *)
 
-    stream |> Lwt_stream.iter_n ~max_concurrency begin fun src_item ->
-      let%lwt () = begin
-        try%lwt
-          let%lwt dest_item = Conf.dest_t_of_src_t src_item in
-          Dest.save dest_item >|= ignore
+    let%lwt () = 
+      stream |> Lwt_stream.iter_n ~max_concurrency begin fun src_item ->
+        let%lwt () = 
+          try%lwt
+            src_item
+            |> Conf.dest_t_of_src_t
+            >>= Dest.save
+            >|= ignore
 
-        with | exn ->
-          let%lwt () = Log.fatal ~exn
-            "Failed saving item to destination. STOPPING!" in
-          stop_flag := true;
+          with | exn ->
+            let%lwt () = Log.fatal ~exn
+              "Failed saving item to destination. STOPPING!" in
+            stop_flag := true;
+            Lwt.return ()
+        in
+
+        match%lwt Src.cleanup src_item with
+        | Error exn ->
+          Log.error ~exn "Failed cleaning up item."
+
+        | Ok () ->
           Lwt.return ()
-      end in
-
-      try%lwt Src.cleanup src_item with
-      | exn -> Log.error ~exn "Failed cleaning up item."
-    end >>= fun () ->
+      end
+    in
 
     if !stop_flag then Lwt.return ()
     else
     
-    Src.final_cleanup () >>= fun () ->
+    let%lwt () = Src.final_cleanup () in
     
-    Log.info
+    let%lwt () = Log.info
       ( "\n###############################\n"
       ^   "         FINISHED RUN          \n"
       ^   "###############################" )
-    >>= fun () ->
+    in
 
     if Conf.loop_infinitely 
     then sync ()
