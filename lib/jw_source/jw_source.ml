@@ -10,26 +10,6 @@ open Lib.Lwt_result.Just_let_syntax
 module Lwt_result = Lib.Lwt_result
 
 
-module Modified = struct
-  open Sexplib.Std
-
-  type t = {
-    timestamp : int;
-    expires : int option;
-    passthrough : bool;
-  } [@@deriving sexp]
-
-  let make ?expires ~passthrough () =
-    { timestamp = Unix.time () |> Int.of_float; expires; passthrough }
-
-  let to_string t =
-    t |> sexp_of_t |> Sexplib.Sexp.to_string
-
-  let of_string s =
-    s |> Sexplib.Sexp.of_string |> t_of_sexp
-end
-
-
 module type Config = sig
   val params : Jw_client.Platform.param list
   val temp_pub_tag : string
@@ -59,30 +39,15 @@ module Make (Client : Jw_client.Platform.Client)
             (Conf : Config)
             : Made =
 struct
+  let var_store = (module Var_store : Sync.Variable_store)
+
+
   type accounts_template = Jw_client.Platform.accounts_templates_list_template
   type videos_video = Jw_client.Platform.videos_list_video
   type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
   type t = videos_video
          * (string * int option * int option) option
          * string option
-
-
-  let changed_video_key media_id = "video-changed-" ^ media_id
-
-  let get_changed media_id =
-    let key = changed_video_key media_id in
-    Var_store.get_opt key >>= function
-    | None   -> Lwt.return @@ Modified.make ~passthrough:false ()
-    | Some v -> Lwt.return @@ Modified.of_string v
-
-  let set_changed media_id changes =
-    let key = changed_video_key media_id in
-    let value = changes |> Modified.to_string in
-    Var_store.set key value
-
-  let clear_changed media_id =
-    let key = changed_video_key media_id in
-    Var_store.delete key
 
     
   let get_set offset =
@@ -198,7 +163,7 @@ struct
 
 
   let prepare_video_for_sync (vid : videos_video) ~published ~passthrough =
-    let%lwt prev_changes = get_changed vid.key in
+    let%lwt prev_changes = Changes.get_record var_store vid.key in
     let now = Unix.time () |> Int.of_float in
 
     let%bind_open changes = 
@@ -217,7 +182,7 @@ struct
         let%lwt () = Log.infof "[%s] Not published; publishing..." vid.key in
 
         let changes = { prev_changes with expires = vid.expires_date } in
-        let%lwt () = set_changed vid.key changes in
+        let%lwt () = Changes.set_record var_store vid.key changes in
         let%bind () = publish_video vid in
 
         return changes
@@ -257,7 +222,7 @@ struct
       if needs_passthrough then
         let%lwt () = Log.infof "[%s] No passthrough; creating..." vid.key in
         let changes' = { changes with passthrough = true } in
-        let%lwt () = set_changed vid.key changes' in
+        let%lwt () = Changes.set_record var_store vid.key changes' in
 
         add_passthrough_conversion vid.key
       else
@@ -271,7 +236,7 @@ struct
 
     let%lwt { expires; passthrough; _ } =
       match changed with 
-      | None -> get_changed media_id
+      | None -> Changes.get_record var_store media_id
       | Some c -> Lwt.return c 
     in
 
@@ -320,7 +285,7 @@ struct
       match%lwt Client.delete_conversion_by_name media_id "passthrough" with
       | Error (Not_found_s _) (* Likely deleted outside this program. *)
       | Ok () ->
-        let%lwt () = clear_changed media_id in
+        let%lwt () = Changes.clear_record var_store media_id in
         return ()
 
       | Error e ->
@@ -340,31 +305,9 @@ struct
 
 
   let cleanup_old_changes ~exclude ?(min_age=0) () = 
-    let now = Unix.time () |> Int.of_float in
+    Changes.get_all_records var_store ~except:exclude ~min_age ()
 
-    let prefix = changed_video_key "" in
-    let pattern = changed_video_key "%" in
-
-    let%lwt changed_list = Var_store.get_like pattern in
-
-    changed_list
-    |> List.map ~f:begin fun (key, changes) ->
-      let media_id =
-        String.substr_replace_first key ~pattern:prefix ~with_:"" in
-      (media_id, changes)
-    end
-
-    |> List.filter ~f:begin fun (media_id, _) ->
-      Option.is_none @@ List.find exclude ~f:(String.equal media_id)
-    end
-
-    |> List.map ~f:(fun (m, c) -> m, Modified.of_string c)
-
-    |> List.filter ~f:begin fun ((_, { timestamp; _ }) : string * Modified.t) ->
-        (now - timestamp) > min_age
-    end
-
-    |> Lwt_list.iter_p begin fun (media_id, changed) ->
+    >>= Lwt_list.iter_p begin fun (media_id, changed) ->
       match%lwt cleanup_by_media_id media_id ~changed () with
       | Error exn ->
         let%lwt () = Log.errorf ~exn "[%s] Failed cleaning up." media_id in
@@ -380,11 +323,11 @@ struct
 
   (** [clear_temp_changes_for_return ?changed vid] Makes sure any changes to
       [vid] that are just to facilitate the sync process are not actually
-      synced to the destination.  *)
+      synced to the destination. *)
   let clear_temp_changes_for_return ?changed (vid : videos_video) =
     let%lwt { expires; _ } =
       match changed with 
-      | None -> get_changed vid.key
+      | None -> Changes.get_record var_store vid.key
       | Some c -> Lwt.return c 
     in
     
