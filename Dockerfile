@@ -78,6 +78,7 @@ COPY lib lib/
 COPY esy.lock esy.lock/
 COPY docker/app/Makefile dune-project package.json ./
 
+RUN make clean-ml-of-atd
 RUN make main.exe
 
 
