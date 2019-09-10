@@ -77,7 +77,7 @@ ml-of-atd: $(_esy)
 
 .PHONY: clean-ml-of-atd
 clean-ml-of-atd:
-	find bin lib -type f -regex '.*\_[tj].mli\?' -exec rm '{}' ';'
+	find bin lib -type f -regex '^.*_[jt]\.mli?$$' -exec rm '{}' ';'
 
 
 ml_files = $(shell for file in $$(find . -type f -iname "*.ml"); do echo "$$file"; done | paste -sd " " -)
