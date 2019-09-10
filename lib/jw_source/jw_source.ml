@@ -42,6 +42,11 @@ struct
   let var_store = (module Var_store : Sync.Variable_store)
 
 
+  module Videos_set = Videos_set.Make (Client) (Var_store) (struct
+    let base_jw_request_params = Conf.params
+  end)
+
+
   type accounts_template = Jw_client.Platform.accounts_templates_list_template
   type videos_video = Jw_client.Platform.videos_list_video
   type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
@@ -50,26 +55,20 @@ struct
          * string option
 
     
-  let get_set offset =
-    let params = Jw_client.Util.merge_params
-      Conf.params
-      [ "result_offset", [offset |> Int.to_string] ]
-    in
+  let sleep_if_few_left count =
+    if count = 0 then Lwt.return ()
+    else 
 
-    let%bind { videos; _ } = Client.videos_list ~params () in
-    Lwt_result.return videos
+    match 15 - count/3 with
+    | s when s > 0 ->
+      let%lwt () = Log.infof
+        "--> Only %d videos left processing; waiting %d seconds before checking again."
+        count s
+      in
+      Lwt_unix.sleep (s |> Float.of_int) 
 
-
-  let sleep_if_few_left l =
-    match List.length l with
-    | 0 -> Lwt.return ()
-    | count ->
-      match 15 - count/3 with
-      | s when s > 0 ->
-        Log.infof "--> Only %d videos left processing; waiting %d seconds before checking again."
-          (List.length l) s >>= fun () ->
-        Lwt_unix.sleep (s |> Float.of_int) 
-      | _ ->  Lwt.return ()
+    | _ ->
+      Lwt.return ()
 
 
   let get_status_and_passthrough media_id =
@@ -113,21 +112,6 @@ struct
     in
 
     Client.videos_update vid.key params
-
-
-  let refresh_current_videos_set ~returned =
-    let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
-    let%bind vids = get_set (offset |> Int.of_string) in
-
-    let to_check =
-      vids |> List.filter ~f:begin fun (v : videos_video) ->
-        returned
-        |> List.find ~f:(fun (r : videos_video) -> String.equal r.key v.key)
-        |> Option.is_none
-      end
-    in
-
-    Lwt_result.return (vids, to_check)
 
 
   (* Cache the passthrough template key. This will save nearly 1 API request
@@ -381,9 +365,6 @@ struct
       ~(should_sync : t -> bool Lwt.t) 
       ~stop_flag
   : t Lwt_stream.t =
-    let current_videos_set = ref [] in
-    let videos_to_check = ref [] in
-    let processing_videos = ref [] in
     (* Keep track of requests that fail for likely temporary reasons to be
        reported just before finishing sync. Since failed requests lead to
        skipping to the next item, we want to log these in case the user
@@ -397,108 +378,43 @@ struct
         Lwt_result.return None
       else
 
-      let%bind_open () = 
-        match !videos_to_check, !processing_videos with
-        | [], [] ->
-          (* Check for new videos at the current offset in case more were 
-            added (or some removed, pushing more into the current offset) in 
-            the time it took to process the current set *)
-          let%bind_open refreshed =
-            match !current_videos_set with
-            (* First set, no need to refresh *)
-            | [] -> return ([], []) 
-            (* Since [videos_to_check] and [processing_videos] are empty, we can
-              assume that all videos in [current_videos_set] have been returned.
-              *)
-            | returned -> refresh_current_videos_set ~returned
-          in
+      let%lwt () = Log.debugf "Running next videos set step..." in
 
-          begin match refreshed with
-          | _, [] ->
-            let%lwt () = Log.debug "Getting next set." in
-            let%lwt offset = Var_store.get "request_offset" ~default:"0" () in
-
-            let new_offset =
-              (offset |> Int.of_string) + (List.length !current_videos_set) in
-            let%lwt () =
-              Var_store.set "request_offset" (new_offset |> Int.to_string) in
-            let%lwt () = Log.debugf "--> offset: %d" new_offset in
-
-            let%bind vids = get_set new_offset in
-
-            let () = current_videos_set := vids in
-            let () = videos_to_check := vids in
-
-            let%lwt () = Log.infof "Got new set of %d videos at offset %d"
-              (List.length vids) new_offset in
-
-            let%lwt () = Log.debug "Cleaning up old changes." in
-            let exclude = 
-              !videos_to_check
-              |> List.map ~f:(fun (v : videos_video) -> v.key)
-            in
-
-            return_lwt @@
-              cleanup_old_changes ~exclude ~min_age:(12 * 60 * 60) ()
-
-          | refreshed_set, refreshed_to_check ->
-            let%lwt () = Log.infof
-              "Returned all vidoes in current set, but %d more were added at the current offset during that time. Processing those." 
-              (List.length refreshed_to_check)
-            in
-            let () = current_videos_set := refreshed_set in
-            let () = videos_to_check := refreshed_to_check in
-            return ()
-          end
-
-          | [], _ -> 
-            let%lwt () = Log.debug
-              "List of videos to check exhausted. Refreshing data of those still in processing and setting them up to be checked again."
-            in
-
-            (* Be sure we grab any updates that happened outside this program 
-              * during the last pass. *)
-            let returned =
-              !current_videos_set
-              |> List.filter ~f:begin fun (c : videos_video) ->
-                !processing_videos 
-                |> List.find
-                  ~f:(fun (p : videos_video) -> String.equal p.key c.key)
-                |> Option.is_none
-              end
-            in
-
-            let%bind (refreshed_set, refreshed_to_check) =
-              refresh_current_videos_set ~returned
-            in
-
-            let%lwt () = Log.infof
-              "Checking on %d videos marked as processing."
-              (List.length refreshed_to_check)
-            in
-
-            let () = 
-              current_videos_set := refreshed_set;
-              videos_to_check := refreshed_to_check;
-              processing_videos := [];
-            in
-
-            return_lwt @@ sleep_if_few_left !videos_to_check 
-
-          | _, _
-            -> return ()
-      in
-
-      match !videos_to_check with
-      | [] -> 
+      match%bind Videos_set.step () with
+      | All_sets_finished ->
         let%lwt () = log_request_failures !failed_requests in
         let%lwt () = Log.info "Processed all videos at source." in
-        let%lwt () = Var_store.delete "request_offset" in
         Lwt_result.return None
 
-      | vid :: tl ->
+      | New_set (`Offset offset, `Count count) ->
+        let%lwt () =
+          Log.infof "Got new set of %d videos at offset %d." count offset in
+        next ()
+
+      | Set_finished ->
+        let%lwt () = Log.debug "Finished all videos at current offset." in
+        let%lwt () = Log.debug "Cleaning up old changes." in
+        let%lwt () =
+          cleanup_old_changes ~exclude:[] ~min_age:(12 * 60 * 60) () in
+        next ()
+
+      | New_in_current_set count ->
+        let%lwt () = Log.infof
+          "Returned all vidoes in current set, but %d more were added at the current offset during that time. Processing those." 
+          count
+        in
+        next ()
+
+      | Processing_to_check count ->
+        let%lwt () = Log.debugf
+          "Checked all videos at current offset, but still waiting on %d vidoes marked as processing."
+          count
+        in
+        let%lwt () = sleep_if_few_left count in
+        next ()
+
+      | Next vid ->
         let%lwt () = Log.debugf "Checking [%s: %s]" vid.key vid.title in
-        let () = videos_to_check := tl in
 
         let%lwt sync_needed =
           let%lwt v = clear_temp_changes_for_return vid in
@@ -558,7 +474,7 @@ struct
             | Ok () ->
               let%lwt () = Log.debugf
                 "[%s] Adding to processing list. NEXT!" vid.key in
-              let () = processing_videos := vid :: !processing_videos in
+              let () = Videos_set.add_to_processing vid in
 
               (* This video isn't ready to be returned yet, take at the next
                  video in the list. This video will get looked at again once

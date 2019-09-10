@@ -6,8 +6,7 @@ module Record : sig
   type t =
     { timestamp : int
     ; expires : int option
-    ; passthrough : bool
-    ; }
+    ; passthrough : bool }
 end
 
 val set_record 
