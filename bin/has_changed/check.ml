@@ -1,5 +1,6 @@
 
-open Lib.Infix
+open Lib.Infix.Function
+open Lib.Infix.Option
 
 module Blist = BatList
 

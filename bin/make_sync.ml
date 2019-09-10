@@ -1,6 +1,6 @@
 
 
-open Lib.Infix
+open Lib.Infix.Option
 open Printf
 
 module Blist = BatList
@@ -139,7 +139,7 @@ let get_cms_id (v : video) =
 
 
 let make
-  ~(conf : Lib.Conf.Sync.t)
+  ~(conf : Config.Sync.t)
   ~ovp_name
   (module Src : Jw_source.Made) 
   (module Dest : Rdb_dest.Made)

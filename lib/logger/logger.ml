@@ -1,6 +1,6 @@
 
 open Printf
-open Lib.Infix
+open Lib.Infix.Option
 
 
 module Level = struct

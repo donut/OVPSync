@@ -7,7 +7,7 @@ module type DBC = Caqti_lwt.CONNECTION
 module Bopt = BatOption
 
 open Lwt.Infix
-open Lib.Infix
+open Lib.Infix.Option
 
 let spf = Printf.sprintf
 

@@ -1,9 +1,6 @@
 
-module Conf = Lib.Conf
-
-
 let make_jw_src
-  db_pool log_level (client : Conf.Jw_client.t) (src : Conf.Jw_source.t)
+  db_pool log_level (client : Config.Jw_client.t) (src : Config.Jw_source.t)
 = 
   let module Client_log = Logger.Make(struct
     let prefix = client.log_namespace
@@ -38,7 +35,7 @@ let make_jw_src
   (module Src : Jw_source.Made)
 
 
-let make_rdb_dest db_pool log_level (conf : Conf.Rdb_dest.t) =
+let make_rdb_dest db_pool log_level (conf : Config.Rdb_dest.t) =
   let module Log = Logger.Make(struct
     let prefix = conf.log_namespace
     let level = log_level conf.log_level

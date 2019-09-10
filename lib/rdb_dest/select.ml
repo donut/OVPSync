@@ -1,5 +1,5 @@
 
-open Lib.Infix
+open Lib.Infix.Option
 
 module type DBC = Caqti_lwt.CONNECTION
 module Bopt = BatOption

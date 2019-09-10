@@ -28,7 +28,7 @@ type link = {
 }
 
 type error = {
-  message : string;
+  message : string option;
   id : int;
 }
 
