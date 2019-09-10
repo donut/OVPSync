@@ -98,7 +98,7 @@ clean-data:
 
 .PHONY: shell
 shell: .env
-	$(dc) exec $(s) sh -c "fish || bash || sh || exit 0"
+	$(dc) exec $(s) sh -c "bash || sh || exit 0"
 	
 
 define ESY_FOR_HOST
