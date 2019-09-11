@@ -7,6 +7,9 @@ type ('ok, 'bad) t = ('ok, 'bad) Result.t Lwt.t
 
 let return a = a |> Result.return |> Lwt.return
 let fail a = a |> Result.fail |> Lwt.return
+
+let try_return f = try return @@ f () with exn -> fail exn
+
 let return_lwt a = Lwt.map Result.return a
 let fail_lwt a = Lwt.map Result.fail a
 
@@ -28,6 +31,7 @@ module Let_syntax = struct
   module Open_on_rhs = struct
     let return = return
     let fail = fail
+    let try_return = try_return
     let return_lwt = return_lwt
     let fail_lwt = fail_lwt
   end

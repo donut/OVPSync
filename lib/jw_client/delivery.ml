@@ -54,5 +54,5 @@ let get_media media_id ?params () =
 
   | true,           _ -> 
     let%lwt body = Clwt.Body.to_string body in
-    Lwt_result.return @@ Some (V2_media_body_j.t_of_string body)
+    Lwt_result.try_return (fun () -> Some (V2_media_body_j.t_of_string body))
 

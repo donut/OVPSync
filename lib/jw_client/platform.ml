@@ -196,7 +196,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     match C.Response.status resp with
     | `OK ->
       let%lwt body = Clwt.Body.to_string body in
-      Lwt_result.return @@ Accounts_templates_list_body_j.t_of_string body
+      try_return (fun () -> Accounts_templates_list_body_j.t_of_string body)
 
     |   _ ->
       fail_lwt @@ unexpected_response_status ~path ?params ~resp ~body () 
@@ -211,7 +211,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     match C.Response.status resp with
     | `OK ->
       let%lwt body = Clwt.Body.to_string body in
-      return @@ Videos_list_body_j.t_of_string body
+      try_return (fun () -> Videos_list_body_j.t_of_string body)
 
     | _ -> 
       fail_lwt @@ unexpected_response_status ~path ?params ~resp ~body ()
@@ -227,7 +227,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
 
     | `OK ->
       let%lwt body = Clwt.Body.to_string body in
-      return @@ Some (Videos_show_body_j.t_of_string body)
+      try_return (fun () -> Some (Videos_show_body_j.t_of_string body))
 
     | _ ->
       fail_lwt @@ unexpected_response_status ~path ~params ~resp ~body ()
@@ -278,9 +278,10 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
 
     let%bind resp, body = call path ~params () in
     match C.Response.status resp with
-    | `OK ->
+    | `OK -> begin
       let%lwt body = Clwt.Body.to_string body in
-      return @@ Videos_conversions_list_body_j.t_of_string body
+      try_return (fun () -> Videos_conversions_list_body_j.t_of_string body)
+    end
 
     | `Not_found ->
       fail @@ Not_found_s (Parsexp.Single.parse_string_exn media_id)
