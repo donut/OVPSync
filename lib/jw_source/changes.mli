@@ -5,8 +5,14 @@ module Record : sig
   (** Represents a set of changes made to a single video. *)
   type t =
     { timestamp : int
+      (** When the changes were first recorded. *)
     ; expires : int option
-    ; passthrough : bool }
+      (** The old expires date if it was changed. [None] if it was not 
+          changed. *)
+    ; passthrough : bool
+      (** Whether or not a passthrough conversion was added to the associaed
+          video. *)
+    }
 end
 
 val set_record 
