@@ -80,7 +80,7 @@ clean-ml-of-atd:
 	find bin lib -type f -regex '^.*_[jt]\.mli?$$' -exec rm '{}' ';'
 
 
-ml_files = $(shell for file in $$(find . -type f -iname "*.ml"); do echo "$$file"; done | paste -sd " " -)
+ml_files = $(shell for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do echo "$$file"; done | paste -sd " " -)
 
 _esy/default/build/default/bin/main.exe: $(_esy) $(atd_ml_files) $(ml_files)
 	esy build

@@ -138,7 +138,7 @@ $(_esy): esy.lock/index.json
 	esy install
 
 
-ml_files = $(shell for file in $$(find . -type f -iname "*.ml"); do echo "$$file"; done | paste -sd " " -)
+ml_files = $(shell for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do echo "$$file"; done | paste -sd " " -)
 
 
 .PHONY: test
