@@ -53,23 +53,22 @@ atd_j_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo 
 atd_ml_files = $(atd_t_ml_files) $(atd_j_ml_files)
 
 
-.PHONY: atdgen
-atdgen:
-	$(eval atd_file := $(shell echo -n "$$(expr "$(file)" : '\(.*\)\_[tj].ml').atd"))
-	esy atdgen -$(type) $(atd_file)
-
+define atdgen
+	$(eval atd_file := $(shell echo -n "$$(expr "$2" : '\(.*\)\_[tj].ml').atd"))
+	esy atdgen -$1 $(atd_file)
+endef
 
 bin/%_t.ml: $(_esy)
-	$(MAKE) atdgen type=t file=$@
+	$(call atdgen,t,$@)
 
 bin/%_j.ml: $(_esy)
-	$(MAKE) atdgen type=j file=$@
+	$(call atdgen,j,$@)
 
 lib/%_t.ml: $(_esy)
-	$(MAKE) atdgen type=t file=$@
+	$(call atdgen,t,$@)
 
 lib/%_j.ml: $(_esy)
-	$(MAKE) atdgen type=j file=$@
+	$(call atdgen,j,$@)
 
 
 .PHONY: ml-of-atd
