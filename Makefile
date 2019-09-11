@@ -142,8 +142,8 @@ ml_files = $(shell for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?
 
 
 .PHONY: test
-test: $(_esy) $(ml_files)
-	esy x dune runtest
+test: .env
+	$(app-make) $@
 
 
 main-exe := _esy/default/build/default/bin/main.exe

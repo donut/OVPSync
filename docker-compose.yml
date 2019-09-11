@@ -9,6 +9,9 @@ services:
       # Use docker-compose.override.yml to target the `development` environment.
       target: production
     restart: unless-stopped
+    tty: true
+    environment:
+      - TERM=xterm-256color
     volumes:
       - ./docker/app/entrypoint.sh:/app/entrypoint.sh
       - ./_env/config.json:/app/_env/config.json:ro
@@ -23,10 +26,12 @@ services:
     restart: unless-stopped
     ports: [ "3306" ]
     environment:
+      - TERM=xterm-256color
       - MYSQL_ROOT_PASSWORD
       - MYSQL_DATABASE
       - MYSQL_USER
       - MYSQL_PASSWORD
+    tty: true
     volumes:
       - ./_data/db/data:/var/lib/mysql
       - ./docker/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro

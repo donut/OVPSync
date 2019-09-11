@@ -40,7 +40,7 @@ work/gdate.c.patch:
 _esy := _esy/default/installation.json
 
 $(_esy): work/gdate.c.patch package.json
-	esy install
+	esy install --color=always
 	find /root/.esy -name "gdate.c" -exec patch -N '{}' work/gdate.c.patch ';'
 
 .PHONY: clean-esy-build
@@ -85,15 +85,20 @@ clean-ml-of-atd:
 
 ml_files = $(shell for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do echo "$$file"; done | paste -sd " " -)
 
+.PHONY: test
+test: $(_esy) $(atd_ml_files) $(ml_files)
+	esy x dune runtest
+
+
 _esy/default/build/default/bin/main.exe: $(_esy) $(atd_ml_files) $(ml_files)
-	esy build
+	esy build --color=always
 
 .PHONY: main.exe
 main.exe: _esy/default/build/default/bin/main.exe
 
 .PHONY: rebuild
 rebuild: $(_esy)
-	esy build
+	esy build --color=always
 
 .PHONY: run
 run: _esy/default/build/default/bin/main.exe
