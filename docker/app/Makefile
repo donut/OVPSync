@@ -58,16 +58,10 @@ define atdgen
 	esy atdgen -$1 $(atd_file)
 endef
 
-bin/%_t.ml: $(_esy)
+$(atd_t_ml_files): %_t.ml: %.atd $(_esy)
 	$(call atdgen,t,$@)
 
-bin/%_j.ml: $(_esy)
-	$(call atdgen,j,$@)
-
-lib/%_t.ml: $(_esy)
-	$(call atdgen,t,$@)
-
-lib/%_j.ml: $(_esy)
+$(atd_j_ml_files): %_j.ml: %.atd $(_esy)
 	$(call atdgen,j,$@)
 
 
