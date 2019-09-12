@@ -198,17 +198,17 @@ struct
         try_next ()
 
       | Error
-          (Jw_client.Exn.Unexpected_response_status (method_, path, response))
-          ->
+        (Jw_client.Exn.Unexpected_response_status (method_, path, response))
+      ->
         let () = stop_flag := true in
-        let%lwt () = Log.fatalf
+        let%lwt () = Log.errorf
           "Unexpected HTTP response\n\
             --> Request: [%s %s]\n\n\
             --> Response <--\n%s\n\n"
           method_ path response
         in
         let%lwt () = log_request_failures !failed_requests in
-        Lwt.return None
+        try_next ()
 
       | Error (Jw_client.Exn.Temporary_error (meth, uri, exn)) ->
         let%lwt () = Log.warnf
@@ -220,9 +220,9 @@ struct
 
       | Error exn ->
         let () = stop_flag := true in
-        let%lwt () = Log.fatalf ~exn "Unexpected error" in
+        let%lwt () = Log.errorf ~exn "Unexpected error" in
         let%lwt () = log_request_failures !failed_requests in
-        Lwt.return None
+        try_next ()
 
       | Ok video ->
         Lwt.return video
