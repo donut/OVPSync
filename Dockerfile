@@ -10,7 +10,7 @@ WORKDIR /
 
 # Packages needed to build OCaml libraries. Not really sure how many of these
 # are actually necessary, but testing them via elimination takes too long for
-# now. Just now that some of these may be unecessary or only required by 
+# now. Just note that some of these may be unnecessary or only required by 
 # specific libraries.
 RUN apt-get update && apt-get install --assume-yes \
   build-essential \
