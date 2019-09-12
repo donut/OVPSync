@@ -186,7 +186,6 @@ struct
     let rec try_next () =
       match%lwt next () with
       | Error (Jw_client.Exn.Timeout (meth, uri)) ->
-        let () = stop_flag := true in
         let%lwt () = Log.warnf "Request timed out: [%s %s]" meth uri in
 
         (* @todo Add method to recover from timeout errors without completely
@@ -194,13 +193,11 @@ struct
                  [match !videos_to_check with ...] section with [try] *)
         let () =
           failed_requests := (meth, uri, "timed out") :: !failed_requests in
-
         try_next ()
 
       | Error
         (Jw_client.Exn.Unexpected_response_status (method_, path, response))
       ->
-        let () = stop_flag := true in
         let%lwt () = Log.errorf
           "Unexpected HTTP response\n\
             --> Request: [%s %s]\n\n\
@@ -219,7 +216,6 @@ struct
         try_next ()
 
       | Error exn ->
-        let () = stop_flag := true in
         let%lwt () = Log.errorf ~exn "Unexpected error" in
         let%lwt () = log_request_failures !failed_requests in
         try_next ()
