@@ -78,6 +78,10 @@ COPY lib lib/
 COPY esy.lock esy.lock/
 COPY docker/app/Makefile dune-project package.json ./
 
+# Run the install separately from `make main.exe` even though that task would
+# trigger `esy install` so that this step can be cached. Otherwise, every time
+# there is a code change we have to wait for the lengthy install process.
+RUN make esy_install
 RUN make clean-ml-of-atd
 RUN make main.exe
 

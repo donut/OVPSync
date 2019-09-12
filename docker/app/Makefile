@@ -43,6 +43,9 @@ $(_esy): work/gdate.c.patch package.json
 	esy install --color=always
 	find /root/.esy -name "gdate.c" -exec patch -N '{}' work/gdate.c.patch ';'
 
+.PHONY:
+esy_install: $(_esy)
+
 .PHONY: clean-esy-build
 clean-esy-build: 
 	rm -rf _esy
