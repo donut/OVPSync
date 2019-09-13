@@ -72,16 +72,19 @@ FROM development as app-build
 
 WORKDIR /app
 
-COPY bin bin/
-COPY lib lib/
-COPY esy.lock esy.lock/
-COPY docker/app/Makefile dune-project package.json ./
+COPY docker/app/Makefile ./
 
 # Install and build dependencies in steps separate from `make main.exe` which
 # would do this anyway so that Docker will store these separate steps in the
 # build cache and avoid repeating them every time code changes in the project.
+COPY esy.lock esy.lock/
+COPY dune-project package.json ./
 RUN make install-dependencies
 RUN make build-dependencies
+
+COPY bin bin/
+COPY lib lib/
+
 RUN make clean-ml-of-atd
 RUN make main.exe
 
