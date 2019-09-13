@@ -69,7 +69,7 @@ let saveable_uri_field run name ~old ~new' =
   in
 
   let to_log _old _new' = 
-    Printf.sprintf "%s has not been downloaded previously." name in
+    Printf.sprintf "%s has not been downloaded previously" name in
     
   run ~has_changed ~to_log old new'
 
