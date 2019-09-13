@@ -41,9 +41,13 @@ ENV PATH=/esy/bin:$PATH
 ### Development environment ###
 FROM esy-bin as development
 
-# See https://serverfault.com/q/683605/54523
+# Timezone
+# See https://stackoverflow.com/a/44333806/134014
 ARG TZ
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes tzdata \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install --assume-yes \
   # Niceties
@@ -66,11 +70,6 @@ ENTRYPOINT ["tail", "-f", "/dev/null"]
 ### Build for production ###
 FROM development as app-build
 
-# See https://serverfault.com/q/683605/54523
-ARG TZ
-ENV TZ=$TZ
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
 WORKDIR /app
 
 COPY bin bin/
@@ -90,10 +89,14 @@ RUN make main.exe
 ### Production ###
 FROM ubuntu:bionic as production
 
-# See https://serverfault.com/q/683605/54523
+# Timezone
+# See https://stackoverflow.com/a/44333806/134014
 ARG TZ
 ENV TZ=$TZ
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes tzdata \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install --assume-yes \
   # Needed for @opam/caqti-driver-mariadb
