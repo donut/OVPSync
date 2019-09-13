@@ -136,14 +136,14 @@ struct
 
       | New_in_current_set count ->
         let%lwt () = Log.infof
-          "Returned all vidoes in current set, but %d more were added at the current offset during that time. Processing those." 
+          "Returned all videos in current set, but %d more were added at the current offset during that time. Processing those." 
           count
         in
         next ()
 
       | Processing_to_check count ->
         let%lwt () = Log.debugf
-          "Checked all videos at current offset, but still waiting on %d vidoes marked as processing."
+          "Checked all videos at current offset, but still waiting on %d videos marked as processing."
           count
         in
         let%lwt () = sleep_if_few_left count in

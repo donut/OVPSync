@@ -102,7 +102,7 @@ module Make = functor
 
   let step () =
     match !current with 
-    (* No vidoes loaded from current offset, yet. *)
+    (* No videos loaded from current offset, yet. *)
     | { all = []; _ } ->
       let%lwt offset = current_offset () in
       let%bind all = get ~params:Config.base_jw_request_params ~offset in
