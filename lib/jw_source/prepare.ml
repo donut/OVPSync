@@ -231,7 +231,7 @@ module Make = functor
       |> function
         | None -> 
           Lwt_result.fail @@ Not_found_s
-            (Parsexp.Single.parse_string_exn "passthrough template not found.")
+            (Sexplib.Conv.sexp_of_string "passthrough template not found.")
 
         | Some { key; _ } ->
           let () = cached_passthrough_template_key := Some key in

@@ -243,7 +243,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
       return ()
 
     | `Not_found ->
-      fail @@ Not_found_s (Parsexp.Single.parse_string_exn key)
+      fail @@ Not_found_s (Sexplib.Conv.sexp_of_string key)
 
     |  _ ->
       fail_lwt @@ unexpected_response_status ~path ~params ~resp ~body ()
@@ -264,7 +264,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
       return ()
 
     | `Not_found ->
-      fail @@ Not_found_s (Parsexp.Single.parse_string_exn media_id)
+      fail @@ Not_found_s (Sexplib.Conv.sexp_of_string media_id)
 
     | _ -> 
       fail_lwt @@ unexpected_response_status ~path ~params ~resp ~body ()
@@ -284,7 +284,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     end
 
     | `Not_found ->
-      fail @@ Not_found_s (Parsexp.Single.parse_string_exn media_id)
+      fail @@ Not_found_s (Sexplib.Conv.sexp_of_string media_id)
 
     | _ ->
       fail_lwt @@ unexpected_response_status ~path ~params ~resp ~body ()
@@ -300,7 +300,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
       return ()
 
     | `Not_found ->
-      fail @@ Not_found_s (Parsexp.Single.parse_string_exn key)
+      fail @@ Not_found_s (Sexplib.Conv.sexp_of_string key)
 
     | _ ->
       fail_lwt @@ unexpected_response_status ~path ~params ~resp ~body ()
@@ -315,7 +315,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     templates
     |> List.find ~f:(fun t -> String.(equal (lowercase t.name) name))
     >|? (fun { key; _ } -> videos_conversions_create media_id key)
-    =?: fail @@ Not_found_s (Parsexp.Single.parse_string_exn template_name)
+    =?: fail @@ Not_found_s (Sexplib.Conv.sexp_of_string template_name)
     
 
   let delete_conversion_by_name media_id template_name = 
@@ -328,5 +328,5 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
     |> List.find
       ~f:(fun c -> String.(lowercase c.template.name |> equal name))
     >|? (fun { key; _ } -> videos_conversions_delete key)
-    =?: fail @@ Not_found_s (Parsexp.Single.parse_string_exn template_name)
+    =?: fail @@ Not_found_s (Sexplib.Conv.sexp_of_string template_name)
 end
