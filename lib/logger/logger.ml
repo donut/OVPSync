@@ -62,7 +62,7 @@ module type Sig = sig
 end
 
 
-let last_entry = ref None
+let last_date_print = ref None
 
 
 module type Config = sig
@@ -91,7 +91,8 @@ module Make (Conf : Config) : Sig = struct
     let now = Unix.time () in
 
     let%lwt () = 
-      if (now -. (!last_entry =?: 0.)) > (24. *. 60. *. 60.) then
+      if (now -. (!last_date_print =?: 0.)) > (24. *. 60. *. 60.) then
+        let () = last_date_print := Some now in
         let date = date_string_of_timestamp now in
         let separator = "##################################################" in
         Lwt_io.printlf
@@ -100,7 +101,6 @@ module Make (Conf : Config) : Sig = struct
       else
         Lwt.return ()
     in
-    let () = last_entry := Some now in
 
     let time = time_string_of_timestamp now in
     let lvl = Level.to_symbol level in
