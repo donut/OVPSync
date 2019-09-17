@@ -266,6 +266,9 @@ module Make = functor
       in
 
       match passthrough with
+      | None -> 
+        return true
+
       | Some { status = `Failed; key = conversion_key; _ } ->
         (* @todo Deal with passthrough conversions that fail every time.
                 This has the potential to infinitely loop. *)
@@ -274,7 +277,7 @@ module Make = functor
         let%bind () = Platform.videos_conversions_delete conversion_key in
         return true
 
-      | Some _ | None ->
+      | Some _ ->
         return false
     in
 
