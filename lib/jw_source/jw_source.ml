@@ -2,9 +2,9 @@
 open Base
 open Printf
 
-open Lib.Lwt_result.Just_let_syntax
+open Lib.Result_lwt.Just_let_syntax
 
-module Lwt_result = Lib.Lwt_result
+module Result_lwt = Lib.Result_lwt
 
 
 module type Config = sig
@@ -21,7 +21,7 @@ module type Made = sig
 
   val make_stream
     : should_sync:(t -> bool Lwt.t) -> stop_flag:(bool ref) -> t Lwt_stream.t
-  val cleanup : t -> unit Lwt_result.t
+  val cleanup : t -> unit Result_lwt.t
   val final_cleanup : unit -> unit Lwt.t
 end
 
@@ -111,7 +111,7 @@ struct
       if !stop_flag then
         let%lwt () = Log.info "Stop flag set. Stopping sync." in
         let%lwt () = log_request_failures !failed_requests in
-        Lwt_result.return None
+        Result_lwt.return None
       else
 
       let%lwt () = Log.debugf "Running next videos set step..." in
@@ -120,7 +120,7 @@ struct
       | All_sets_finished ->
         let%lwt () = log_request_failures !failed_requests in
         let%lwt () = Log.info "Processed all videos at source." in
-        Lwt_result.return None
+        Result_lwt.return None
 
       | New_set (`Offset offset, `Count count) ->
         let%lwt () =
@@ -179,7 +179,7 @@ struct
           in
           let%lwt () = Log.infof "[%s] %s RETURNING!" key message in
 
-          Lwt_result.return @@ Some t
+          Result_lwt.return @@ Some t
         end
     in
 

@@ -2,11 +2,11 @@
 
 open Base
 open Lwt.Infix
-open Lib.Lwt_result.Just_let_syntax
+open Lib.Result_lwt.Just_let_syntax
 open Lib.Infix.Function
 open Lib.Infix.Option
 
-module Lwt_result = Lib.Lwt_result
+module Result_lwt = Lib.Result_lwt
 
 
 type accounts_template = Jw_client.Platform.accounts_templates_list_template
@@ -101,10 +101,10 @@ module Make = functor
       | Error (Not_found_s _) (* Likely deleted outside this program. *)
       | Ok () ->
         let%lwt () = Changes.clear_record var_store media_id in
-        Lwt_result.return ()
+        Result_lwt.return ()
 
       | Error e ->
-        Lwt_result.fail e
+        Result_lwt.fail e
 
 
   let cleanup_by_media_id ?changed media_id =
@@ -143,7 +143,7 @@ module Make = functor
       else Log.debugf "[%s] No changes to undo." media_id
     in
 
-    Lwt_result.return ()
+    Result_lwt.return ()
 
 
   let cleanup_old_changes ~exclude ?(min_age=0) () = 
@@ -190,15 +190,15 @@ module Make = functor
 
     match published, expires_date with
     | true, _ ->
-      Lwt_result.return changes
+      Result_lwt.return changes
 
     | false, None ->
       let%lwt () = Log.infof "[%s] Waiting on publish." key in
-      Lwt_result.return changes
+      Result_lwt.return changes
 
     | false, Some e when e > now ->
       let%lwt () = Log.infof "[%s] Waiting on publish." key in
-      Lwt_result.return changes
+      Result_lwt.return changes
 
     | false, Some _ ->
       let%lwt () = Log.infof "[%s] Not published; publishing..." key in
@@ -207,7 +207,7 @@ module Make = functor
       let%lwt () = Changes.set_record var_store key changes in
       let%bind () = publish_video vid in
 
-      Lwt_result.return changes
+      Result_lwt.return changes
 
 
   (* Cache the passthrough template key. This will save nearly 1 API request
@@ -217,7 +217,7 @@ module Make = functor
   let passthrough_template_key () =
     match !cached_passthrough_template_key with
     | Some k ->
-      Lwt_result.return k
+      Result_lwt.return k
 
     | None ->
       let%bind body = Platform.accounts_templates_list () in
@@ -230,12 +230,12 @@ module Make = functor
 
       |> function
         | None -> 
-          Lwt_result.fail @@ Not_found_s
+          Result_lwt.fail @@ Not_found_s
             (Sexplib.Conv.sexp_of_string "passthrough template not found.")
 
         | Some { key; _ } ->
           let () = cached_passthrough_template_key := Some key in
-          Lwt_result.return key
+          Result_lwt.return key
 
 
 
@@ -249,7 +249,7 @@ module Make = functor
     ~(changes : Changes.Record.t)
     ~passthrough
   =
-    if Option.is_some passthrough then Lwt_result.return changes
+    if Option.is_some passthrough then Result_lwt.return changes
     else
 
     let%bind_open needs_passthrough = 
@@ -288,11 +288,11 @@ module Make = functor
       let%lwt () = Changes.set_record var_store key changes in
       let%bind () = add_passthrough_conversion key in
 
-      Lwt_result.return changes
+      Result_lwt.return changes
 
     else
       let%lwt () = Log.infof "[%s] Waiting on passthrough." key in
-      Lwt_result.return changes
+      Result_lwt.return changes
 
 
   (** [clear_temp_changes_for_return ?changed vid] Makes sure any changes to
@@ -335,7 +335,7 @@ module Make = functor
 
     if not sync_needed then 
       let%bind () = cleanup_by_media_id key in
-      Lwt_result.return No_need_to_sync
+      Result_lwt.return No_need_to_sync
     else
 
     match status, sourcetype with
@@ -349,7 +349,7 @@ module Make = functor
       let thumb = original_thumb_url key in
       let t = (vid, file, Some thumb) in
 
-      Lwt_result.return begin
+      Result_lwt.return begin
         match sourcetype with
         | `File -> Prepared (t, Has_non_ready_status)
         | `URL -> Prepared (t, Source_is_URL)
@@ -366,13 +366,13 @@ module Make = functor
           let%lwt c = Changes.get_record var_store key in
           let%bind c = publish_video_if_needed ~changes:c ~published vid in
           let%bind c = add_passthrough_if_needed ~changes:c ~passthrough vid in
-          Lwt_result.return c
+          Result_lwt.return c
         in
 
         begin match%lwt changes with
-        | Error (Not_found_s _) -> Lwt_result.return Missing
-        | Error e -> Lwt_result.fail e
-        | Ok _ -> Lwt_result.return Processing
+        | Error (Not_found_s _) -> Result_lwt.return Missing
+        | Error e -> Result_lwt.fail e
+        | Ok _ -> Result_lwt.return Processing
         end
 
       | true, Some { file; width; height; _ } ->
@@ -380,7 +380,7 @@ module Make = functor
         let thumb = original_thumb_url key in
         let t = (vid, Some (file, width, height), Some thumb) in
 
-        Lwt_result.return @@
+        Result_lwt.return @@
           Prepared (t, Published_with_passthrough)
       end
 end

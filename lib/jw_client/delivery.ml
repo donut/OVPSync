@@ -3,13 +3,13 @@
 open Exn
 open Base
 open Lwt.Infix
-open Lib.Lwt_result.Just_let_syntax
+open Lib.Result_lwt.Just_let_syntax
 
 
 module C = Cohttp
 module Clwt = Cohttp_lwt
 module Clu = Cohttp_lwt_unix
-module Lwt_result = Lib.Lwt_result
+module Result_lwt = Lib.Result_lwt
 
 
 type v2_media_body = V2_media_body_t.t
@@ -26,14 +26,14 @@ let get path ?(params=[]) () =
   in
 
   try%lwt 
-    Clu.Client.get uri >>= Lwt_result.return
+    Clu.Client.get uri >>= Result_lwt.return
 
   with
   | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
-    Lwt_result.fail @@ Timeout ("GET", (Uri.to_string uri))
+    Result_lwt.fail @@ Timeout ("GET", (Uri.to_string uri))
 
   | exn ->
-    Lwt_result.fail @@ unknown_request_failure "GET" uri exn
+    Result_lwt.fail @@ unknown_request_failure "GET" uri exn
 
 
 let get_media media_id ?params () =
@@ -46,13 +46,13 @@ let get_media media_id ?params () =
 
   match C.Code.is_success code, status with
   | false, `Not_found ->
-    Lwt_result.return None
+    Result_lwt.return None
 
   | false,          _ ->
-    Lwt_result.fail_lwt @@
+    Result_lwt.fail_lwt @@
       unexpected_response_status ~path ?params ~resp ~body ()
 
   | true,           _ -> 
     let%lwt body = Clwt.Body.to_string body in
-    Lwt_result.try_return (fun () -> Some (V2_media_body_j.t_of_string body))
+    Result_lwt.try_return (fun () -> Some (V2_media_body_j.t_of_string body))
 

@@ -1,10 +1,10 @@
 
 open Base
 open Lwt.Infix
-open Lib.Lwt_result.Just_let_syntax
+open Lib.Result_lwt.Just_let_syntax
 open Lib.Infix.Function
 
-module Lwt_result = Lib.Lwt_result
+module Result_lwt = Lib.Result_lwt
 
 module type Jw_platform = Jw_client.Platform.Client
 module type VS = Sync.Variable_store
@@ -92,7 +92,7 @@ module Make = functor
     in
 
     let%bind { videos; _ } = Platform.videos_list ~params () in
-    Lwt_result.return videos
+    Result_lwt.return videos
 
 
   let videos_at_current_offset () =
@@ -111,12 +111,12 @@ module Make = functor
       | [] ->
         (* No more videos to process. *)
         let%lwt () = clear_offset () in
-        Lwt_result.return
+        Result_lwt.return
           All_sets_finished
 
       | _ ->
         let () = current := { all; to_check = all; processing = [] } in
-        Lwt_result.return @@
+        Result_lwt.return @@
           New_set (`Offset offset, `Count (List.length all))
       end
 
@@ -136,7 +136,7 @@ module Make = functor
           the next set. *)
         let%lwt _ = increment_offset (List.length all) in
         let () = current := empty () in
-        Lwt_result.return
+        Result_lwt.return
           Set_finished
 
       | to_check ->
@@ -144,7 +144,7 @@ module Make = functor
           checked. *)
         let () = current :=
           { all = latest_at_offset; to_check; processing = [] } in
-        Lwt_result.return @@
+        Result_lwt.return @@
           New_in_current_set (List.length to_check)
       end
 
@@ -157,14 +157,14 @@ module Make = functor
 
       let () = current := 
         { all = latest_at_offset; to_check; processing = [] } in
-      Lwt_result.return @@
+      Result_lwt.return @@
         Processing_to_check (List.length to_check)
 
     (* There are videos ready to be checked. *)
     | { all; to_check = hd :: tl; processing } ->
       let () = current :=
         { all; to_check = tl; processing } in
-      Lwt_result.return @@
+      Result_lwt.return @@
         Next hd
 
 

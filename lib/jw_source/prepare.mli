@@ -62,7 +62,7 @@ module Make : functor
   (Config : Config)
 -> sig
   val cleanup_by_media_id
-    : ?changed : Changes.Record.t -> string -> unit Lib.Lwt_result.t
+    : ?changed : Changes.Record.t -> string -> unit Lib.Result_lwt.t
   (** [cleanup_by_media_id ?changed media_id] undos changes made to the video
       on JW represented by [media_id]. Passing [changed] allows skipping a 
       lookup in [Var_store]. *)
@@ -76,7 +76,7 @@ module Make : functor
   val video 
      : Jw_client.Platform.videos_list_video 
     -> should_sync : (t -> bool Lwt.t)
-    -> status Lib.Lwt_result.t
+    -> status Lib.Result_lwt.t
   (** [video vid ~should_sync] prepares [vid] for sync unless passing it to
       [should_sync] returns [false], returning the status of the video if it's
       not ready for sync yet, or the video along with metadata regarding its
