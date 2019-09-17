@@ -85,25 +85,31 @@ module Make (Conf : Config) : Sig = struct
     sprintf "%2d:%02d:%02d" hr min sec
 
 
+  let maybe_print_full_date now last =
+    let { Unix.tm_yday=now_day; _ } = Unix.localtime now in
+    let { Unix.tm_yday=then_day; _ } = Unix.localtime (last =?: 0.) in
+
+    if last = None || now_day <> then_day then
+      let date = date_string_of_timestamp now in
+      let separator = "##################################################" in
+      Lwt_io.printlf
+        "%s\n                    %s                    \n%s"
+        separator date separator
+    else
+      Lwt.return ()
+
+
   let log (level : Level.t) message =
     if Level.compare Conf.level level < 0 then Lwt.return ()
     else
     let now = Unix.time () in
 
-    let%lwt () = 
-      if (now -. (!last_entry =?: 0.)) > (24. *. 60. *. 60.) then
-        let date = date_string_of_timestamp now in
-        let separator = "##################################################" in
-        Lwt_io.printlf
-          "%s\n                    %s                    \n%s"
-          separator date separator
-      else
-        Lwt.return ()
-    in
+    let%lwt () = maybe_print_full_date now !last_entry in
     let () = last_entry := Some now in
 
     let time = time_string_of_timestamp now in
     let lvl = Level.to_symbol level in
+
     Lwt_io.printlf "%s %s %s  %s" time Conf.prefix lvl message
 
 
