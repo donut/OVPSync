@@ -2,40 +2,59 @@
 open Base
 
 
-type ('ok, 'bad) t = ('ok, 'bad) Result.t Lwt.t
+type 'ok t = ('ok, exn) Result.t Lwt.t
 
+
+let return a = Lwt.return (Ok a)
+let fail exn = Lwt.return (Error exn)
+
+let try_return f = try return @@ f () with exn -> fail exn
+
+let return_lwt a = Lwt.try_bind (fun () -> a) return fail
+let fail_lwt exn = Lwt.try_bind (fun () -> exn) fail fail
+
+
+let catch_lwt_exn a =
+  Lwt.try_bind
+    (fun () -> a)
+    (fun a -> Lwt.return a)
+    (fun exn -> fail exn)
+
+
+let bind a ~f =
+  Lwt.bind a begin function
+    | Error e -> fail e
+    | Ok v -> f v
+  end
+  |> catch_lwt_exn
+
+
+let map a ~f =
+  a |> Lwt.map (Result.map ~f) |> catch_lwt_exn
+
+
+let both a b = 
+  Lwt.bind a (fun a -> Lwt.map (Result.Let_syntax.Let_syntax.both a) b)
+  |> catch_lwt_exn
+  
 
 module Let_syntax = struct
-  module Open_on_rhs = struct
-    let return a = a |> Result.return |> Lwt.return
-    let fail a = a |> Result.fail |> Lwt.return
-
-    let try_return f = try return @@ f () with exn -> fail exn
-
-    let return_lwt a = Lwt.map Result.return a
-    let fail_lwt a = Lwt.map Result.fail a
-  end
-
-  open Open_on_rhs
-
   let return = return
+  let bind = bind
+  let map = map
+  let both = both
 
-  let bind a  ~f =
-    Lwt.bind a begin function
-      | Error e -> fail e
-      | Ok v -> f v
-    end
-
-  let map a ~f = Lwt.map (Result.map ~f) a
-
-  let both a b = 
-    Lwt.bind a (fun a -> Lwt.map (Result.Let_syntax.Let_syntax.both a) b)
-
+  module Open_on_rhs = struct
+    let return = return
+    let fail = fail
+    let try_return = try_return
+    let return_lwt = return_lwt
+    let fail_lwt = fail_lwt
+  end
 end
 
 
-include Let_syntax
-include Open_on_rhs
+module Open_on_rhs = Let_syntax.Open_on_rhs
 
 
 module Just_let_syntax = struct

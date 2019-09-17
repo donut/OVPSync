@@ -1,20 +1,21 @@
 
 
-type ('ok, 'bad) t = ('ok, 'bad) Base.Result.t Lwt.t
+type 'ok t = ('ok, exn) Base.Result.t Lwt.t
+
 
 module Let_syntax : sig
-  module Open_on_rhs : sig
-    val return : 'ok -> ('ok, 'bad) t
-    val fail : 'bad -> ('ok, 'bad) t
-    val try_return : (unit -> 'ok) -> ('ok, exn) t
-    val return_lwt : 'ok Lwt.t -> ('ok, 'bad) t
-    val fail_lwt : 'bad Lwt.t -> ('ok, 'bad) t
-  end
+  val return : 'ok -> 'ok t
+  val bind : 'a t -> f : ('a -> 'b t) -> 'b t
+  val map : 'a t -> f : ('a -> 'b) -> 'b t
+  val both : 'a t -> 'b t -> ('a * 'b) t
 
-  val return : 'ok -> ('ok, 'bad) t
-  val bind : ('a, 'bad) t -> f : ('a -> ('b, 'bad) t) -> ('b, 'bad) t
-  val map : ('a, 'bad) t -> f : ('a -> 'b) -> ('b, 'bad) t
-  val both : ('a, 'bad) t -> ('b, 'bad) t -> ('a * 'b, 'bad) t
+  module Open_on_rhs : sig
+    val return : 'ok -> 'ok t
+    val fail : exn -> 'ok t
+    val try_return : (unit -> 'ok) -> 'ok t
+    val return_lwt : 'ok Lwt.t -> 'ok t
+    val fail_lwt : exn Lwt.t -> 'ok t
+  end
 end
 
 

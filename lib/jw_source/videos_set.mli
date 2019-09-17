@@ -43,7 +43,7 @@ module Make : functor
   (Var_store : Sync.Variable_store)
   (Config : Config)
 -> sig
-  val step : unit -> (step, exn) Lib.Lwt_result.t
+  val step : unit -> step Lib.Lwt_result.t
   (** [step ()] returns the next video to be checked or runs the next step in
       handling the sets of videos to be checked. *)
 

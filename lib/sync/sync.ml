@@ -16,7 +16,7 @@ module type Source = sig
 
   val make_stream
     : should_sync:(t -> bool Lwt.t) -> stop_flag:(bool ref) -> t Lwt_stream.t
-  val cleanup : t -> (unit, exn) Lib.Lwt_result.t
+  val cleanup : t -> unit Lib.Lwt_result.t
   val final_cleanup : unit -> unit Lwt.t
 end
 
