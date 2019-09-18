@@ -154,7 +154,7 @@ struct
 
         begin match%bind Prep.video ~should_sync vid with 
         | No_need_to_sync ->
-          let%lwt () = Log.infof "[%s] No need to sync. NEXT!" vid.key in
+          let%lwt () = Log.debugf "[%s] No need to sync. NEXT!" vid.key in
           next ()
 
         | Missing -> 
