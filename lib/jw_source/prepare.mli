@@ -20,6 +20,19 @@ type prepared =
     (** The file associated with this video is not hosted by the source, but
         at the specified source URL. We don't need to do prep in order to 
         sync. *)
+  | Publish_timed_out
+    (** Waiting on the video to publish at JW took too long so we're returning
+        it as is and without video or thumbnail as neither are accessible of an
+        unpublished video. *)
+  | Passthrough_timed_out
+    (** Waiting on the passthrough conversion to be processed at JW took too 
+        long. The next largest (by dimensions) conversion that exists will
+        be used in the passthrough's place, if one exists. *)
+  | Passthrough_error
+    (** An error was returned when testing the passthrough URL. There are some
+        outstanding support cases with JW (#00094413, #00085845) related to
+        this. The next largest (by dimensions) conversion that exists will be 
+        used in the passthrough's place, if one exists. *)
   | Published_with_passthrough
     (** The video is published and has a passthrough conversion. A passthrough
         conversion is a way to access the original video file on JW's servers.

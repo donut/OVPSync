@@ -1,4 +1,5 @@
 
+module Error' = Error
 
 open Base
 open Lwt.Infix
@@ -7,15 +8,20 @@ open Lib.Infix.Function
 open Lib.Infix.Option
 
 module Result_lwt = Lib.Result_lwt
+module Error = Error'
 
 
 type accounts_template = Jw_client.Platform.accounts_templates_list_template
 type videos_video = Jw_client.Platform.videos_list_video
 type videos_conversion = Jw_client.Platform.videos_conversions_list_conversion
+type media_source = Jw_client.V2_media_body_t.source
 
 type t = videos_video
         * (string * int option * int option) option
         * string option
+
+
+let processing_timeout = 60 * 60
 
 
 let original_thumb_url media_id = 
@@ -27,26 +33,58 @@ let get_status_and_passthrough media_id =
 
   match%map Jw_client.Delivery.get_media media_id ~params () with
   | None ->
-    (false, None)
+    (false, None, None)
 
   | Some { playlist = []; _ } ->
-    (true, None)
+    (true, None, None)
 
-  | Some { playlist = media :: _; _ } -> 
+  | Some { playlist = { sources; _ } :: _; _ } -> 
     let passthrough =
-      media.sources
-      |> List.find ~f:begin fun s -> 
-        match Jw_client.V2_media_body_t.(s.label) with
+      sources
+      |> List.find ~f:begin fun ({ label; _ } : media_source) -> 
+        match label with
         | None -> false
         | Some l -> String.(equal (lowercase l) "passthrough")
       end
     in
-    (true, passthrough)
+
+    (* JW currently has some recurring issues when generating passthrough 
+       conversions. Sometimes the passthrough conversion stays queued forever
+       and cannot be stopped and restarted (case #00094413) and other times
+       there will be an error when trying to download the passthrough after
+       it has been marked as ready (case #00085845). A backup source of the
+       next highest quality is provided if available. *)
+    let backup =
+      sources
+      |> List.fold ~init:None ~f:begin fun acc src ->
+        let { label; width; _ } : media_source = src in
+
+        let label = label >|? String.lowercase in
+        if Poly.equal label (Some "passthrough") then acc
+        else
+
+        match width, (acc : media_source option) with
+        | None, _ ->
+          acc
+
+        | Some _, None
+        | Some _, Some { width = None; _ } ->
+          Some src
+
+        | Some src_w, Some { width = Some acc_w; _ } ->
+          if src_w > acc_w then Some src else acc
+      end
+    in
+    
+    (true, passthrough, backup)
 
 
 type prepared = 
   | Has_non_ready_status
   | Source_is_URL
+  | Publish_timed_out
+  | Passthrough_timed_out
+  | Passthrough_error
   | Published_with_passthrough
 
 
@@ -270,8 +308,6 @@ module Make = functor
         return true
 
       | Some { status = `Failed; key = conversion_key; _ } ->
-        (* @todo Deal with passthrough conversions that fail every time.
-                This has the potential to infinitely loop. *)
         let%lwt () =
           Log.errorf "[%s] Passthrough conversion creation failed." key in
         let%bind () = Platform.videos_conversions_delete conversion_key in
@@ -324,8 +360,153 @@ module Make = functor
     Lwt.return { vid with expires_date=expires; tags; custom }
 
 
+  let test_video_file uri ~key =
+    match%lwt Remote_file.test (Uri.of_string uri) with
+    | Error exn -> 
+      let%lwt () = Log.warnf "[%s].video_file: %s" key (Error.to_string exn) in
+      Lwt.return None
+
+    | Ok () ->
+      Lwt.return @@ Some uri
+
+
+  let test_thumb key =
+    let uri = original_thumb_url key in
+
+    match%lwt Remote_file.test (Uri.of_string uri) with
+    | Error exn -> 
+      let%lwt () = Log.warnf "[%s].thumbnail: %s" key (Error.to_string exn) in
+      Lwt.return None
+
+    | Ok () ->
+      Lwt.return @@ Some uri
+
+
+  let prepare_non_file_video
+    ({ key; sourcetype; sourceurl; _ } as vid: videos_video)
+  =
+    (* Since this program is designed to be run over and over again, 
+        constantly syncing media from JW, we can catch anything that's
+        processing the next time we reach this offset. *)
+    let%lwt vid = clear_temp_changes_for_return vid in
+
+    let%bind file =
+      let%lwt uri =
+        sourceurl
+        >|? test_video_file ~key
+        =?: Lwt.return None
+      in
+      uri
+      >|? (fun s -> (s, None, None))
+      |> Result_lwt.return
+    in
+
+    let%lwt thumb = test_thumb key in
+
+    let t = (vid, file, thumb) in
+
+    Result_lwt.return begin
+      match sourcetype with
+      | `File -> Prepared (t, Has_non_ready_status)
+      | `URL -> Prepared (t, Source_is_URL)
+    end
+
+
+  let return_timed_out_processing_video
+    ({ key; _ } as vid : videos_video)
+    ~published
+    ~backup
+  =
+    if not published then 
+      let t = (vid, None, None) in
+      Result_lwt.return @@
+        Prepared (t, Publish_timed_out)
+
+    else 
+      let%lwt file =
+        backup 
+        >|? begin fun ({ file; width; height; _ } : media_source) ->
+          let%lwt uri = test_video_file ~key file in
+          uri
+          >|? (fun uri -> uri, width, height)
+          |> Lwt.return
+        end 
+        =?: Lwt.return None
+      in
+      let%lwt thumb = test_thumb key in
+      let t = (vid, file, thumb) in
+      Result_lwt.return @@
+        Prepared (t, Passthrough_timed_out)
+
+      
+  let return_video_with_passthrough_error 
+    ({ key; _ } as vid : videos_video)
+    ~backup
+  =
+    let%lwt file =
+      backup 
+      >|? begin fun ({ file; width; height; _ } : media_source) ->
+        let%lwt uri = test_video_file ~key file in
+        uri
+        >|? (fun uri -> uri, width, height)
+        |> Lwt.return
+      end 
+      =?: Lwt.return None
+    in
+    let%lwt thumb = test_thumb key in
+    let t = (vid, file, thumb) in
+    Result_lwt.return @@
+      Prepared (t, Passthrough_error)
+
+
+
+  let prepare_video_with_file ({ key; _ } as vid: videos_video) =
+    let%lwt () = Log.debugf
+      "[%s] Getting publish and passthrough status." key in
+
+    begin match%bind get_status_and_passthrough key with
+    | (false as published), passthrough, backup
+    | published, (None as passthrough), backup ->
+      let changes = 
+        let%lwt c = Changes.get_record var_store key in
+        let%bind c = publish_video_if_needed ~changes:c ~published vid in
+        let%bind c = add_passthrough_if_needed ~changes:c ~passthrough vid in
+        Result_lwt.return c
+      in
+
+      let now = Unix.time () |> Int.of_float in
+
+      begin match%lwt changes with
+      | Error (Not_found_s _) ->
+        Result_lwt.return Missing
+
+      | Error e ->
+        Result_lwt.fail e
+
+      | Ok { timestamp; _ } when (now - timestamp) > processing_timeout ->
+        return_timed_out_processing_video vid ~published ~backup
+
+      | Ok _ ->
+        Result_lwt.return Processing
+      end
+
+    | true, Some { file; width; height; _ }, backup ->
+      let%lwt vid = clear_temp_changes_for_return vid in
+      let%lwt thumb = key |> test_thumb in
+
+      match%lwt test_video_file ~key file with
+      | None ->
+        return_video_with_passthrough_error vid ~backup
+
+      | Some uri ->
+        let t = (vid, Some (uri, width, height), thumb) in
+        Result_lwt.return @@
+          Prepared (t, Published_with_passthrough)
+    end
+
+
   let video
-      ({ key; status; sourcetype; sourceurl; _ } as vid : videos_video)
+      ({ key; status; sourcetype; _ } as vid : videos_video)
       ~(should_sync : t -> bool Lwt.t) 
   =
     let%lwt sync_needed = 
@@ -341,46 +522,8 @@ module Make = functor
     match status, sourcetype with
     | _, `URL
     | (`Created | `Processing | `Updating | `Failed), `File ->
-      (* Since this program is designed to be run over and over again, 
-          constantly syncing media from JW, we can catch anything that's
-          processing the next time we reach this offset. *)
-      let%lwt vid = clear_temp_changes_for_return vid in
-      let file = sourceurl >|? (fun s -> (s, None, None)) in
-      let thumb = original_thumb_url key in
-      let t = (vid, file, Some thumb) in
-
-      Result_lwt.return begin
-        match sourcetype with
-        | `File -> Prepared (t, Has_non_ready_status)
-        | `URL -> Prepared (t, Source_is_URL)
-      end
+      prepare_non_file_video vid
 
     | `Ready, `File ->
-      let%lwt () = Log.debugf
-        "[%s] Getting publish and passthrough status." key in
-
-      begin match%bind get_status_and_passthrough key with
-      | (false as published), passthrough
-      | published, (None as passthrough) ->
-        let changes = 
-          let%lwt c = Changes.get_record var_store key in
-          let%bind c = publish_video_if_needed ~changes:c ~published vid in
-          let%bind c = add_passthrough_if_needed ~changes:c ~passthrough vid in
-          Result_lwt.return c
-        in
-
-        begin match%lwt changes with
-        | Error (Not_found_s _) -> Result_lwt.return Missing
-        | Error e -> Result_lwt.fail e
-        | Ok _ -> Result_lwt.return Processing
-        end
-
-      | true, Some { file; width; height; _ } ->
-        let%lwt vid = clear_temp_changes_for_return vid in
-        let thumb = original_thumb_url key in
-        let t = (vid, Some (file, width, height), Some thumb) in
-
-        Result_lwt.return @@
-          Prepared (t, Published_with_passthrough)
-      end
+      prepare_video_with_file vid
 end

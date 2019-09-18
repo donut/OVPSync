@@ -170,11 +170,25 @@ struct
              we've gone through every video in the current list to check. *)
           next ()
 
-        | Prepared (t, how) ->
+        | Prepared ((_, file, _) as t, how) ->
           let message =
             match how with
             | Has_non_ready_status -> "has non-ready status."
             | Source_is_URL -> "has URL source."
+            | Publish_timed_out ->
+              "took too long to publish. Video and thumbnail will not be available."
+            | Passthrough_timed_out -> begin
+              "passthrough took too long to process. "
+              ^ match file with
+                | None -> "Video file unavailable."
+                | Some _ -> "Lower quality backup provided in its place."
+            end
+            | Passthrough_error -> begin
+              "passthrough URI returns an error. "
+              ^ match file with
+                | None -> "Video file unavailable."
+                | Some _ -> "Lower quality backup provided in its place."
+            end
             | Published_with_passthrough -> "is published and has passthrough."
           in
           let%lwt () = Log.infof "[%s] %s RETURNING!" key message in
