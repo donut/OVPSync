@@ -29,7 +29,7 @@ let unexpected_response_status ?(meth="GET") ?(params=[]) ~path ~resp ~body () =
     let%lwt body = Cohttp_lwt.Body.to_string body in
     Printf.sprintf
       "### Status: %s ###\n\n\
-       ### Headers ###\n%s\n\n\
+       ### Headers ###\n%s\
        ### Body ###\n%s\n### END Body ###\n"
       status headers body 
     |> Lwt.return
