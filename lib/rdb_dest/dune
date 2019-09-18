@@ -1,6 +1,10 @@
 (library
  (name rdb_dest)
- (libraries lib logger sync batteries caqti caqti-driver-mariadb caqti-lwt
-   cohttp-lwt cohttp-lwt-unix lwt re uri)
+ (libraries
+  lib logger sync
+  batteries
+  caqti caqti-driver-mariadb caqti-lwt
+  cohttp-lwt cohttp-lwt-unix
+  lwt re uri)
  (preprocess
   (pps lwt_ppx ppx_fields_conv)))
