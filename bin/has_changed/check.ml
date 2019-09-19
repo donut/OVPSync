@@ -16,9 +16,19 @@ type ('value, 'result) runner
 let test__run ~has_changed ~to_log:_ a b = has_changed a b
 
 
+let strings_to_log ~name ~old ~new' =
+  let length = String.(length old + length new') in
+  if length < 100 then
+    Printf.sprintf "%s changed from [%s] to [%s]" name old new' 
+  else if length < 140 then
+    Printf.sprintf "%s changed\n--> old: %s\n--> new: %s" name old new'
+  else
+    Printf.sprintf "%s changed\n--> old:\n%s\n--> new:\n%s" name old new'
+
+
 let int_field run name ~old ~new' =
   let to_log old new' = 
-    Printf.sprintf "%s changed from [%d] to [%d]" name old new' in
+    strings_to_log ~name ~old:(string_of_int old) ~new':(string_of_int new') in
   run ~has_changed:(<>) ~to_log old new' 
 
 
@@ -33,9 +43,7 @@ let uri_field run name ~old ~new' =
   let has_changed a b = not @@ Uri.equal a b in
 
   let to_log old new' =
-    Printf.sprintf "%s changed from [%s] to [%s]"
-      name (Uri.to_string old) (Uri.to_string new')
-  in
+    strings_to_log ~name ~old:(Uri.to_string old) ~new':(Uri.to_string new') in
 
   run ~has_changed ~to_log old new'
 
@@ -106,8 +114,7 @@ let%test "saveable_uri_field with remote but different old & new URIs" =
 
 
 let string_field run name ~old ~new' =
-  let to_log old new' = 
-    Printf.sprintf "%s changed from [%s] to [%s]" name old new' in
+  let to_log old new' = strings_to_log ~name ~old ~new' in
   run ~has_changed:(<>) ~to_log old new' 
 
 
@@ -136,8 +143,7 @@ let list_field run ~to_log a b =
 let string_list_field run name ~old ~new' =
   let to_log old new' =
     let str = String.concat "; " in
-    Printf.sprintf "%s changed from [%s] to [%s]"
-      name (str old) (str new')
+    strings_to_log ~name ~old:(str old) ~new':(str new')
   in
 
   list_field run ~to_log old new'
@@ -160,8 +166,7 @@ let string_pair_list_field run name ~old ~new' =
       List.map (fun (k, v) -> k ^ ": " ^ v)
       %> String.concat "; "
     in
-    Printf.sprintf "%s changed from [%s] to [%s]"
-      name (str old) (str new')
+    strings_to_log ~name ~old:(str old) ~new':(str new')
   in
 
   list_field run ~to_log old new'
@@ -203,7 +208,7 @@ let source_list_field_to_log name old new' =
 
   let old = string_of_list old in
   let new' = string_of_list new' in
-  Printf.sprintf "%s changed\n--> from:\n%s\n--> to:\n%s" name old new'
+  strings_to_log ~name ~old ~new'
 
 
 let source_field run name ~old ~new' =
@@ -331,7 +336,7 @@ let optional
 
     let to_log a b =
       let str x = x >|? (fun _ -> "Some") =?: "None" in
-      Printf.sprintf "%s changed from [`%s`] to [`%s`]" name (str a) (str b)
+      strings_to_log ~name ~old:(str a) ~new':(str b)
     in
 
     run ~has_changed ~to_log old new'
