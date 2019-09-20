@@ -66,6 +66,10 @@ module type Client = sig
      : string -> param list 
     -> unit Lib.Result_lwt.t
 
+  val videos_delete 
+     : string list
+    -> unit Lib.Result_lwt.t
+
   val create_conversion_by_name 
      : string -> string 
     -> unit Lib.Result_lwt.t
@@ -245,6 +249,24 @@ module Make (Log : Logger.Sig) (Conf : Config) : Client = struct
       fail @@ Not_found_s (Sexplib.Conv.sexp_of_string key)
 
     |  _ ->
+      fail_lwt @@ unexpected_response_status ~path ~params ~resp ~body ()
+
+
+  let videos_delete media_ids =
+    let path = "/videos/delete" in
+    let media_ids = String.concat ~sep:"," media_ids in
+    let params = ["video_key", [media_ids]] in
+
+    let%bind resp, body = call path ~params () in
+
+    match C.Response.status resp with
+    | `OK  ->
+      return ()
+
+    | `Not_found ->
+      fail @@ Not_found_s (Sexplib.Conv.sexp_of_string media_ids)
+
+    | _ -> 
       fail_lwt @@ unexpected_response_status ~path ~params ~resp ~body ()
 
 

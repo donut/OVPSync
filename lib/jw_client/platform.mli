@@ -49,6 +49,10 @@ module type Client = sig
      : string -> param list 
     -> unit Lib.Result_lwt.t
 
+  val videos_delete 
+     : string list
+    -> unit Lib.Result_lwt.t
+
   val create_conversion_by_name 
      : string -> string 
     -> unit Lib.Result_lwt.t

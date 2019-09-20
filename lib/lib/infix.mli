@@ -1,5 +1,8 @@
 
 module Function : sig
+  val ( <| ) : ('a -> 'b) -> 'a -> 'b
+  (** [l <| r] passes [r] to [l]. Basically, the opposite of [|>]. *)
+
   val ( <% ) : ('b -> 'c) -> ('a -> 'b) -> ('a -> 'c)
   (** [l <% r] composes the functions [l] and [r]. The result is a function
       that will accept [x] and pass it to [r], passing the result of that to 

@@ -1,0 +1,7 @@
+(executable
+ (name remove_duplicates)
+ (libraries
+   config jw_client lib logger rdb_dest
+   base caqti caqti-lwt caqti-driver-mariadb lwt)
+ (preprocess
+  (pps lwt_ppx ppx_let)))

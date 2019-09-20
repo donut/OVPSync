@@ -1,6 +1,8 @@
 
 
 module Function = struct
+  let ( <| ) l r = r |> l
+
   let ( <% ) l r x = x |> r |> l
 
   let ( %> ) l r x = x |> l |> r
