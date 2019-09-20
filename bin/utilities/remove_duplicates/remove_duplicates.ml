@@ -68,6 +68,9 @@ let dedupe ({ video_id; title; canonical; duplicates = dupes } : Db.video) =
       Lwt.return false
   end in
 
+  (* We want to keep at least one source even if it doesn't exist on JW any
+     more. The oldest is most likely to be the one we want to keep and we 
+     determine that by the source lists being ordered oldest -> newest. *)
   let keeper, dupes, missing =
     match exist with
     | [] ->
@@ -81,26 +84,35 @@ let dedupe ({ video_id; title; canonical; duplicates = dupes } : Db.video) =
   let%lwt () = Log.infof "--> Keeper: %s" keeper in
 
   let%lwt () =
+    (* If the video's canonical source is deleted, it will be deleted as
+        well. So we be sure set it to a source that wont be deleted. *)
     match canonical with
     | None ->
+      (* This would mean its canonical source is not from the JW or the current
+         JW property being used. We don't want to touch it in this case. *)
       Lwt.return ()
+
     | Some media_id when String.equal media_id keeper ->
       Lwt.return ()
+
     | Some old ->
       let%lwt () = Log.infof 
         "--> Setting canonical source to keeper from %s." old in 
-      (* Db.update_canonical_source_by_media_id
-        dbc ~video_id ~source_name ~media_id:keeper *)
-      Lwt.return ()
+      Db.update_canonical_by_media_id
+        dbc ~video_id ~source_name ~media_id:keeper
   in
 
   let%lwt () = missing |> Lwt_list.iter_s begin fun media_id ->
+    (* Remove duplicate sources that no longer exist on JW. *)
     let%lwt () = Log.infof
       "--> Deleting missing source %s from local DB." media_id in
     Db.delete_source_by_media_id dbc ~source_name ~media_id
   end in
 
   let%lwt () = dupes |> Lwt_list.iter_s begin fun media_id ->
+    (* Remove from JW before the local DB so that if it fails, we still have a
+       record of the duplicate in our local DB to make it easier to try 
+       again. *)
     let%lwt () = Log.infof
       "--> Deleting duplicate source %s from JW." media_id in
     let%lwt () = Platform.videos_delete [media_id] |> Result_lwt.to_lwt in
