@@ -62,7 +62,7 @@ module Q = struct
 
 
   let update_canonical_by_media_id = Creq.exec
-    (tup3 int string string)
+    (tup3 string string int)
     "UPDATE video \
         SET canonical_source_id = \
               (SELECT video_id FROM source \
@@ -88,7 +88,7 @@ let select_duplicate_sources dbc ~source_name =
 
 
 let update_canonical_by_media_id dbc ~video_id ~source_name ~media_id =
-  Util.exec dbc Q.update_canonical_by_media_id (video_id, source_name, media_id)
+  Util.exec dbc Q.update_canonical_by_media_id (source_name, media_id, video_id)
 
 
 let delete_source_by_media_id dbc ~source_name ~media_id =
