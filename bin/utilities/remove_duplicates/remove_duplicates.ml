@@ -52,9 +52,12 @@ let dedupe ({ video_id; title; canonical; duplicates = dupes } : Db.video) =
   let%lwt () = Log.infof "--> Duplicates: %s" (String.concat ~sep:"; " dupes) in
 
   let%lwt exist, missing = dupes |> Lwt_list.partition_s begin fun id ->
-    match%lwt Jw_client.Delivery.get_media id ()with
+    (* Platform is used over Delivery API in case video was unpublished, in
+       which case Delivery would return 404 but Platform would reutrn properly.
+       *)
+    match%lwt Platform.videos_show id with
     | Error exn ->
-      let%lwt () = Log.errorf ~exn "--> [GET /v2/media/%s] failed." id in
+      let%lwt () = Log.errorf ~exn "--> [GET /videos/show] for %s failed." id in
       Lwt.return true (* Assume it exists. *)
 
     | Ok Some _ ->
