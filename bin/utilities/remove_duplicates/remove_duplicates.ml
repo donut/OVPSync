@@ -2,7 +2,6 @@
 open Base
 
 module Result_lwt = Lib.Result_lwt
-(* open Result_lwt.Just_let_syntax *)
 open Lib.Infix.Option
 
 
@@ -102,7 +101,7 @@ let dedupe ({ video_id; title; canonical; duplicates = dupes } : Db.video) =
   let%lwt () = dupes |> Lwt_list.iter_s begin fun media_id ->
     let%lwt () = Log.infof
       "--> Deleting duplicate source %s from JW." media_id in
-    (* let%bind () = Platform.videos_delete [media_id] in *)
+    let%lwt () = Platform.videos_delete [media_id] |> Result_lwt.to_lwt in
 
     let%lwt () = Log.infof
       "--> Deleting duplicate source %s from local DB." media_id in

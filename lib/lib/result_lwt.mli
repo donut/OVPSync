@@ -67,6 +67,11 @@ include module type of Let_syntax
 include module type of Open_on_rhs
 
 
+val to_lwt : 'a t -> 'a Lwt.t
+(** [to_lwt t] unwraps the value of [t] and wraps it in {!type:Lwt.t} if it is
+    [Ok] or a failed {!type:Lwt.t} if it is [Error]. *)
+
+
 (** [open] this to use with [ppx_let] if you're not opening the top-level
     module. *)
 module Just_let_syntax : sig

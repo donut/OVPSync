@@ -36,6 +36,12 @@ let map a ~f =
 let both a b = 
   Lwt.bind a (fun a -> Lwt.map (Result.Let_syntax.Let_syntax.both a) b)
   |> catch_lwt_exn
+
+
+let to_lwt t =
+  match%lwt t with
+  | Error exn -> Lwt.fail exn
+  | Ok v -> Lwt.return v
   
 
 module Let_syntax = struct
