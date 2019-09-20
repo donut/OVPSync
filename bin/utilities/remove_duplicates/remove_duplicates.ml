@@ -97,8 +97,7 @@ let dedupe ({ video_id; title; canonical; duplicates = dupes } : Db.video) =
   let%lwt () = missing |> Lwt_list.iter_s begin fun media_id ->
     let%lwt () = Log.infof
       "--> Deleting missing source %s from local DB." media_id in
-    (* Db.delete_source_by_media_id dbc ~source_name ~media_id *)
-    Lwt.return ()
+    Db.delete_source_by_media_id dbc ~source_name ~media_id
   end in
 
   let%lwt () = dupes |> Lwt_list.iter_s begin fun media_id ->
@@ -108,7 +107,7 @@ let dedupe ({ video_id; title; canonical; duplicates = dupes } : Db.video) =
 
     let%lwt () = Log.infof
       "--> Deleting duplicate source %s from local DB." media_id in
-    (* let%lwt () = Db.delete_source_by_media_id dbc ~source_name ~media_id in *)
+    let%lwt () = Db.delete_source_by_media_id dbc ~source_name ~media_id in
     
     Lwt.return ()
   end in
