@@ -57,7 +57,6 @@ clean-esy-build:
 
 atd_t_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_t.ml"; done | paste -sd " " -)
 atd_j_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_j.ml"; done | paste -sd " " -)
-atd_ml_files = $(atd_t_ml_files) $(atd_j_ml_files)
 
 
 define atdgen
@@ -85,12 +84,16 @@ clean-ml-of-atd:
 
 ml_files = $(shell for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do echo "$$file"; done | paste -sd " " -)
 
+dune_files = $(shell find lib bin -type f -iname "dune" | paste -sd " " -)
+
+source_files = $(atd_files) $(ml_files) $(dune_files)
+
 .PHONY: test
-test: $(_esy) $(atd_ml_files) $(ml_files)
+test: $(_esy) $(source_files)
 	esy x dune runtest
 
 
-_esy/default/build/default/bin/main.exe: $(_esy) $(atd_ml_files) $(ml_files)
+_esy/default/build/default/bin/main.exe: $(_esy) $(source_files)
 	esy build --color=always
 
 .PHONY: main.exe
