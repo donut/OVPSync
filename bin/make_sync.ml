@@ -199,12 +199,26 @@ let make
     let should_sync src_item =
       let ({ key; sourcetype; _ }, _, _) : src_t = src_item in
 
+      if List.exists ~f:(String.equal key) conf.blacklist then
+        let%lwt () = Log.debugf "[%s] on blacklist." key in
+        Lwt.return false
+      else
+
       match%lwt Dest.get_video ~ovp:ovp_name ~media_id:key with
       | None -> Lwt.return true
 
       | Some old ->
         let%lwt knew = dest_t_of_src_t src_item in
-        let check_md5 = Poly.(sourcetype = `File) in
+        let%lwt check_md5 =
+          if Poly.(sourcetype <> `File) then Lwt.return false
+          else if
+            List.exists ~f:(String.equal key) conf.skip_md5_check_list
+          then
+            let%lwt () = Log.debugf "[%s] on skip MD5 check list." key in
+            Lwt.return false
+          else
+            Lwt.return true
+        in
         Has_changed.video (module Log) ~check_md5 old knew
 
   end) in

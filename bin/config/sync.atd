@@ -5,4 +5,6 @@ type t =
   { max_threads : int
   ; loop_infinitely : bool
   ; log_level : log_level
-  ; log_namespace : string }
+  ; log_namespace : string
+  ; ~blacklist :  string list
+  ; ~skip_md5_check_list : string list }

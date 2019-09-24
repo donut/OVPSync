@@ -47,5 +47,10 @@
     // Once finished syncing, start again.
   , "loop_infinitely" : true
   , "log_level" : "info"
-  , "log_namespace" : "Sync" }
+  , "log_namespace" : "Sync" 
+    // Optional list of media IDs not to sync from source.
+  , "blacklist": ["abc123"]
+    // Optional list of media IDs at the source to not compare local and source
+    // MD5 file hashes when determining whether or not to sync.
+  , "skip_md5_check_list": ["def456"] }
 }
