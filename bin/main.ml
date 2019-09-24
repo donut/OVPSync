@@ -3,10 +3,6 @@ open Lwt.Infix
 
 open Sync_conf
 
-module Blist = BatList
-module Bopt = BatOption
-module Bstr = BatString
-
 exception Caqti_conn_error of string
 exception Unexpected_arguments of string * string
 

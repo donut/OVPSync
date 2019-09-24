@@ -1,11 +1,10 @@
 
 
+
+open Base
+
 open Lib.Infix.Option
 open Printf
-
-module Blist = BatList
-module Bopt = BatOption
-module Bstr = BatString
 
 module Vid_j = Jw_client.Videos_video_j
 
@@ -13,9 +12,12 @@ module Vid_j = Jw_client.Videos_video_j
 type video = Jw_client.Platform.videos_list_video
 
 
+let assoc_get key lst = List.Assoc.find lst ~equal:String.equal key
+
+
 let get_slug (vid : video) = 
-  Blist.assoc_opt "slug" vid.custom
-    =?: (Blist.assoc_opt "file_name" vid.custom =?: vid.title)
+  assoc_get "slug" vid.custom
+    =?: (assoc_get "file_name" vid.custom =?: vid.title)
 
 
 let get_file_details = function 
@@ -26,7 +28,7 @@ let get_file_details = function
 
 
 let get_filename (vid : video) ~fallback =
-  let name = Blist.assoc_opt "file_name" vid.custom =?: fallback in
+  let name = assoc_get "file_name" vid.custom =?: fallback in
   (* Some names are just quotes, which isn't really desired. *)
   let trim_quotes =
     Re.replace_string (Re.Perl.compile_pat "^[\"']+$") ~by:"" in
@@ -39,15 +41,15 @@ let parse_duration d =
   | None -> None
   | Some g -> match Re.Group.all g with
     | [| _; ""; "" |] -> None
-    | [| _;  i; "" |] -> Some (int_of_string i * 1000)
-    | [| _;  i;  d |] -> Some (sprintf "%s%s0" i d |> int_of_string)
+    | [| _;  i; "" |] -> Some (Int.of_string i * 1000)
+    | [| _;  i;  d |] -> Some (sprintf "%s%s0" i d |> Int.of_string)
     | _ -> None
 
 
 let pair_of_field name v =
   [name, v]
 let pair_of_opt_field name v =
-  Bopt.map_default (pair_of_field name) [] v
+  Option.value_map ~f:(pair_of_field name) ~default:[] v
 let pair_of_jfield name f v =
   let clean_j j =
     let ptrn = Re.Perl.compile_pat "^<\"|\">$" in
@@ -55,7 +57,7 @@ let pair_of_jfield name f v =
   in
   pair_of_field name (f v |> clean_j)
 let pair_of_opt_jfield name f v =
-  Bopt.map_default (pair_of_jfield name f) [] v
+  Option.value_map ~f:(pair_of_jfield name f) ~default:[] v
 
 let get_author (v : video) = pair_of_opt_field "author" v.author
 let get_status (v : video) = 
@@ -105,9 +107,9 @@ let get_existing_video_id (v : video) ~ovp_name finder =
   let media_ids = ref [||] in
   let append k v = media_ids := Array.append !media_ids [| k, v |] in
   append ovp_name v.key;
-  List.assoc_opt "Ooyala_content_ID" v.custom >|? (append "ooyala")
+  assoc_get "Ooyala_content_ID" v.custom >|? (append "ooyala")
     |> ignore;
-  List.assoc_opt "OVPMigrate_ID" v.custom >|? (append "ovp_migrate")
+  assoc_get "OVPMigrate_ID" v.custom >|? (append "ovp_migrate")
     |> ignore;
   finder (!media_ids |> Array.to_list)
 
@@ -119,23 +121,23 @@ let get_custom (v : video) =
      and possibily working with other systems, it seems like it'd be better
      to store the values in a way that is most likely to be compatible. *)
   let rec uniquify ?(num=0) ?base keys key =
-    let low_k = Bstr.lowercase key in
-    if List.exists ((=) low_k) keys then
+    let low_k = String.lowercase key in
+    if List.exists ~f:(String.equal low_k) keys then
       let base = base =?: key in
       let k = sprintf "%s_%d" base num in
       uniquify ~num:(num + 1) ~base keys k
     else
       key
   in
-  v.custom |> List.fold_left begin fun (keys, lst) (k, v) ->
+  v.custom |> List.fold_left ~f:begin fun (keys, lst) (k, v) ->
     let key = uniquify keys k in
-    let low_k = Bstr.lowercase key in
+    let low_k = String.lowercase key in
     (low_k :: keys, (key, v) :: lst)
-  end ([], []) |> snd
+  end ~init:([], []) |> snd
 
 
 let get_cms_id (v : video) =
-  Blist.assoc_opt "RTM_site_ID" v.custom >|? ((^) "rightthisminute.com-")
+  assoc_get "RTM_site_ID" v.custom >|? ((^) "rightthisminute.com-")
 
 
 let make
@@ -158,6 +160,11 @@ let make
       let slug = get_slug vid in
       let file_uri, width, height = get_file_details file' in
       let source = get_source vid ~ovp_name in
+      let tags = 
+        vid.tags
+        |> String.split_on_chars ~on:[',']
+        |> List.map ~f:(String.strip ?drop:None)
+      in
 
       { Rdb_dest.Video. 
         id
@@ -178,7 +185,7 @@ let make
 
       ; thumbnail_uri = thumb >|? Uri.of_string
       ; description = vid.description
-      ; tags = String.(split_on_char ',' vid.tags |> List.map trim)
+      ; tags
       ; custom = get_custom vid
 
       ; cms_id = get_cms_id vid
@@ -197,7 +204,7 @@ let make
 
       | Some old ->
         let%lwt knew = dest_t_of_src_t src_item in
-        let check_md5 = sourcetype = `File in
+        let check_md5 = Poly.(sourcetype = `File) in
         Has_changed.video (module Log) ~check_md5 old knew
 
   end) in
