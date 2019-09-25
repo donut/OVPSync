@@ -55,27 +55,28 @@ clean-esy-build:
 	rm -rf _esy
 
 
-atd_t_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_t.ml"; done | paste -sd " " -)
-atd_j_ml_files = $(shell for file in $$(find . -type f -iname "*.atd"); do echo "$$(expr "$$file" : '\./\(.*\)\.atd')_j.ml"; done | paste -sd " " -)
-
+atd_ml_files = $(shell \
+	for file in $$(find . -type f -iname "*.atd"); do \
+		echo "$$(expr "$$file" : '\./\(.*\)\.atd')_t.ml"; \
+		echo "$$(expr "$$file" : '\./\(.*\)\.atd')_j.ml"; \
+	done \
+	| paste -sd " " -\
+)
 
 define atdgen
-	$(eval atd_file := $(shell echo -n "$$(expr "$2" : '\(.*\)\_[tj].ml').atd"))
-	esy atdgen -$1 $(atd_file)
+	$(eval type := $(shell echo -n "$$(expr "$2" : '.*\_\([tj]\).ml')"))
+	esy atdgen -$(type) $1
 endef
 
-$(atd_t_ml_files): %_t.ml: %.atd $(_esy)
-	$(call atdgen,t,$@)
+$(filter %_t.ml,$(atd_ml_files)): %_t.ml: %.atd $(_esy)
+	$(call atdgen,$<,$@)
 
-$(atd_j_ml_files): %_j.ml: %.atd $(_esy)
-	$(call atdgen,j,$@)
+$(filter %_j.ml,$(atd_ml_files)): %_j.ml: %.atd $(_esy)
+	$(call atdgen,$<,$@)
 
 
 .PHONY: ml-of-atd
-ml-of-atd: $(_esy)
-	find . -type f -name '*.atd' \
-		-exec esy atdgen -t '{}' ';' \
-		-exec esy atdgen -j '{}' ';' 
+ml-of-atd: $(_esy) $(atd_ml_files)
 
 .PHONY: clean-ml-of-atd
 clean-ml-of-atd:
