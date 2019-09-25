@@ -92,7 +92,7 @@ ml_files = $(shell \
 
 dune_files = $(shell find . -type f -iname "dune" | paste -sd " " -)
 
-source_files = $(atd_files) $(ml_files) $(dune_files)
+source_files = $(atd_ml_files) $(ml_files) $(dune_files)
 
 .PHONY: test
 test: $(_esy) $(source_files)
