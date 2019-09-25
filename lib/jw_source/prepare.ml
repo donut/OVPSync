@@ -347,6 +347,7 @@ module Make = functor
     let tags =
       vid.tags
       |> String.split ~on:','
+      |> List.map ~f:(String.strip ?drop:None)
       |> List.filter ~f:(String.equal Config.temp_pub_tag %> not)
       |> String.concat ~sep:", "
     in   
