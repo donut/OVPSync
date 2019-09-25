@@ -355,7 +355,7 @@ module Make = functor
     let custom = 
       vid.custom
       |> List.filter
-        ~f:((fst %> String.equal Config.backup_expires_field %> not)) 
+        ~f:(fst %> String.equal Config.backup_expires_field %> not) 
     in
 
     Lwt.return { vid with expires_date=expires; tags; custom }
