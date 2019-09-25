@@ -200,7 +200,7 @@ let make
       let ({ key; sourcetype; _ }, _, _) : src_t = src_item in
 
       if List.exists ~f:(String.equal key) conf.blacklist then
-        let%lwt () = Log.debugf "[%s] on blacklist." key in
+        let%lwt () = Log.infof "[%s] on blacklist." key in
         Lwt.return false
       else
 
@@ -214,7 +214,7 @@ let make
           else if
             List.exists ~f:(String.equal key) conf.skip_md5_check_list
           then
-            let%lwt () = Log.debugf "[%s] on skip MD5 check list." key in
+            let%lwt () = Log.infof "[%s] on skip MD5 check list." key in
             Lwt.return false
           else
             Lwt.return true
