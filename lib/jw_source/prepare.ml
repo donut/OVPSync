@@ -417,6 +417,8 @@ module Make = functor
     ~published
     ~backup
   =
+    let%lwt vid = clear_temp_changes_for_return vid in
+
     if not published then 
       let t = (vid, None, None) in
       Result_lwt.return @@
@@ -443,6 +445,7 @@ module Make = functor
     ({ key; _ } as vid : videos_video)
     ~backup
   =
+    let%lwt vid = clear_temp_changes_for_return vid in
     let%lwt file =
       backup 
       >|? begin fun ({ file; width; height; _ } : media_source) ->
@@ -491,7 +494,6 @@ module Make = functor
       end
 
     | true, Some { file; width; height; _ }, backup ->
-      let%lwt vid = clear_temp_changes_for_return vid in
       let%lwt thumb = key |> test_thumb in
 
       match%lwt test_video_file ~key file with
@@ -499,6 +501,7 @@ module Make = functor
         return_video_with_passthrough_error vid ~backup
 
       | Some uri ->
+        let%lwt vid = clear_temp_changes_for_return vid in
         let t = (vid, Some (uri, width, height), thumb) in
         Result_lwt.return @@
           Prepared (t, Published_with_passthrough)
