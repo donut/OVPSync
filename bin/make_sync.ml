@@ -162,7 +162,7 @@ let make
       let source = get_source vid ~ovp_name in
       let tags = 
         vid.tags
-        |> String.split_on_chars ~on:[',']
+        |> String.split ~on:','
         |> List.map ~f:(String.strip ?drop:None)
       in
 

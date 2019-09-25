@@ -116,7 +116,7 @@ module Make = functor
     let expires = expires_date =?: expires in
 
     let tags = tags
-      |> String.split_on_chars ~on:[',']
+      |> String.split ~on:','
       |> List.map ~f:(String.strip ?drop:None)
       |> List.filter ~f:(String.equal Config.temp_pub_tag %> not)
       |> String.concat ~sep:", "
@@ -201,7 +201,7 @@ module Make = functor
   let publish_video ({ key; tags; expires_date; _ } : videos_video) =
     let tags =
       tags
-      |> String.split_on_chars ~on:[',']
+      |> String.split ~on:','
       |> List.map ~f:(String.strip ?drop:None)
       |> (fun l -> Config.temp_pub_tag :: l)
       |> String.concat ~sep:", "
@@ -346,7 +346,7 @@ module Make = functor
 
     let tags =
       vid.tags
-      |> String.split_on_chars ~on:[',']
+      |> String.split ~on:','
       |> List.filter ~f:(String.equal Config.temp_pub_tag %> not)
       |> String.concat ~sep:", "
     in   

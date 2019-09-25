@@ -82,7 +82,7 @@ let select_duplicate_sources dbc ~source_name =
   Util.collect_list dbc Q.select_duplicate_sources (source_name, source_name)
 
   >|= List.map ~f:begin fun (video_id, title, canonical, sources) ->
-    let duplicates = sources |> String.split_on_chars ~on:[';'] in
+    let duplicates = sources |> String.split ~on:';' in
     { video_id; title; canonical; duplicates }
   end
 
