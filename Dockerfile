@@ -82,8 +82,8 @@ COPY dune-project package.json ./
 RUN make install-dependencies
 RUN make build-dependencies
 
-COPY bin bin/
 COPY lib lib/
+COPY bin bin/
 
 RUN make clean-ml-of-atd
 RUN make main.exe
