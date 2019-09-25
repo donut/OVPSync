@@ -83,7 +83,12 @@ clean-ml-of-atd:
 	find bin lib -type f -regex '^.*_[jt]\.mli?$$' -exec rm '{}' ';'
 
 
-ml_files = $(shell for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do echo "$$file"; done | paste -sd " " -)
+ml_files = $(shell \
+	for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do \
+		echo "$$file"; \
+	done \
+	| paste -sd " " - \
+)
 
 dune_files = $(shell find . -type f -iname "dune" | paste -sd " " -)
 
