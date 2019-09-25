@@ -1,4 +1,5 @@
 
+open Base
 open Lwt.Infix
 
 module Cpool = Caqti_lwt.Pool
@@ -21,10 +22,10 @@ module Make (Conf : Config) = struct
       DB.find_opt Select.var_by_key (Conf.namespace, key))
     >>= Caqti_lwt.or_fail >>= function
     | Some v -> Lwt.return v
-    |  None ->
+    | None ->
       begin match default with
       | Some v -> Lwt.return v
-      | None -> raise Not_found
+      | None -> raise @@ Not_found_s (Sexplib0.Sexp_conv.sexp_of_string key)
       end
 
   let get_opt key =

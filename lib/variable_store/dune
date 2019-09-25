@@ -1,3 +1,4 @@
 (library
  (name variable_store)
- (libraries batteries caqti caqti-driver-mariadb caqti-lwt lwt))
+ (libraries base caqti caqti-driver-mariadb caqti-lwt lwt)
+ (preprocess (pps lwt_ppx ppx_let)))
