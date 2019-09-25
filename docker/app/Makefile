@@ -84,7 +84,7 @@ clean-ml-of-atd:
 
 ml_files = $(shell for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do echo "$$file"; done | paste -sd " " -)
 
-dune_files = $(shell find lib bin -type f -iname "dune" | paste -sd " " -)
+dune_files = $(shell find . -type f -iname "dune" | paste -sd " " -)
 
 source_files = $(atd_files) $(ml_files) $(dune_files)
 
