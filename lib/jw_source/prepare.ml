@@ -389,11 +389,9 @@ module Make = functor
     (* Since this program is designed to be run over and over again, 
         constantly syncing media from JW, we can catch anything that's
         processing the next time we reach this offset. *)
-    let%lwt () = Log.tracef "<%s> clearing temp changes for return." key in
     let%lwt vid = clear_temp_changes_for_return vid in
 
     let%bind file =
-      let%lwt () = Log.tracef "<%s> testing video file." key in
       let%lwt uri =
         sourceurl
         >|? test_video_file ~key
@@ -404,7 +402,6 @@ module Make = functor
       |> Result_lwt.return
     in
 
-    let%lwt () = Log.tracef "<%s> testing thumbnail file." key in
     let%lwt thumb = test_thumb key in
 
     let t = (vid, file, thumb) in
@@ -517,14 +514,11 @@ module Make = functor
       ~(should_sync : t -> bool Lwt.t) 
   =
     let%lwt sync_needed = 
-      let%lwt () = Log.tracef "<%s> clearing temp changes." key in
       let%lwt vid = clear_temp_changes_for_return vid in
-      let%lwt () = Log.tracef "<%s> running `should_sync`." key in
       should_sync (vid, None, None)
     in
 
     if not sync_needed then 
-      let%lwt () = Log.tracef "<%s> no sync needed, cleaning up." key in
       let%bind () = cleanup_by_media_id key in
       Result_lwt.return No_need_to_sync
     else
@@ -532,10 +526,8 @@ module Make = functor
     match status, sourcetype with
     | _, `URL
     | (`Created | `Processing | `Updating | `Failed), `File ->
-      let%lwt () = Log.tracef "<%s> preping as non-file." key in
       prepare_non_file_video vid
 
     | `Ready, `File ->
-      let%lwt () = Log.tracef "<%s> preping as file based." key in
       prepare_video_with_file vid
 end
