@@ -1,4 +1,5 @@
 
+open Lib.Infix.Function
 open Lib.Infix.Option
 
 module type DBC = Caqti_lwt.CONNECTION
@@ -131,6 +132,9 @@ let tags_by_video_id dbc vid_id =
   Util.collect_list dbc Q.video_tags vid_id
 
 
+exception Wrong_canonical_source of { video_id : int }
+
+
 let video dbc id =
   match%lwt Util.find_opt dbc Q.video id with
   | None -> Lwt.return None
@@ -146,7 +150,10 @@ let video dbc id =
     let expires = expires_pt |> Bopt.map Util.int_of_ptime in
 
     let file_uri = Bopt.map Uri.of_string file in
-    let filename = Uri.path (Bopt.default Uri.empty file_uri)
+    let filename =
+      file_uri
+      |> Bopt.default Uri.empty
+      |> Uri.path
       |> String.split_on_char '/'
       |> BatList.last
       |> Uri.pct_decode in
@@ -160,9 +167,14 @@ let video dbc id =
     let link = link' >|? Uri.of_string in
 
     let%lwt sources = sources_by_video_id dbc id in
-    let canonical = sources |> List.find (fun s ->
-      let id = (Source.id s |> Bopt.get) in
-      id == canonical_source_id)
+    let canonical = 
+      sources
+      |> List.find_opt (Source.id %> (=) (Some canonical_source_id))
+      |> function 
+        | None -> 
+          raise @@ Wrong_canonical_source { video_id = id }
+        | Some source ->
+          source
     in
 
     Some
