@@ -9,12 +9,12 @@ services:
       target: development
     volumes:
       # Required for building.
-      - ./docker/app/Makefile:/app/Makefile:ro
-      - ./bin:/app/bin
-      - ./lib:/app/lib
-      - ./dune-project:/app/dune-project
-      - ./esy.lock:/app/esy.lock
-      - ./package.json:/app/package.json
+      - ./src:/app/src
+#      - ./bin:/app/bin
+#      - ./lib:/app/lib
+#      - ./dune-project:/app/dune-project
+#      - ./esy.lock:/app/esy.lock
+#      - ./package.json:/app/package.json
 
       # Required for running app
       - ./_env/config.json:/app/_env/config.json:ro

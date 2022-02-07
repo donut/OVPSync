@@ -3,7 +3,7 @@ version: '3.6'
 services:
   app:
     build: 
-      context: .
+      context: ./docker/app
       args:
         TZ: ${TZ:?TZ unset. Use `make .env`.}
       # Use docker-compose.override.yml to target the `development` environment.

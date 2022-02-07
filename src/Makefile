@@ -1,0 +1,74 @@
+SHELL = /bin/bash
+
+
+.PHONY: PHONY
+PHONY:
+
+
+_ignore := $(shell eval $$(opam env))
+
+
+_opam/.opam-switch/switch-config:
+	eval (opam env)
+	opam switch create . --empty
+	opam switch import switch-export.opam
+
+switch-export.opam: _opam/.opam-switch/switch-config
+	eval (opam env)
+	opam switch export switch-export.opam
+
+
+atd_ml_files = $(shell \
+	for file in $$(find ./bin ./lib -type f -iname "*.atd"); do \
+		echo "$$(expr "$$file" : '\./\(.*\)\.atd')_t.ml"; \
+		echo "$$(expr "$$file" : '\./\(.*\)\.atd')_j.ml"; \
+	done \
+	| paste -sd " " -\
+)
+
+define atdgen
+	$(eval type := $(shell echo -n "$$(expr "$2" : '.*\_\([tj]\).ml')"))
+	atdgen -$(type) $1
+endef
+
+$(filter %_t.ml,$(atd_ml_files)): %_t.ml: %.atd switch-export.opam
+	$(call atdgen,$<,$@)
+
+$(filter %_j.ml,$(atd_ml_files)): %_j.ml: %.atd switch-export.opam
+	$(call atdgen,$<,$@)
+
+
+ml-of-atd: PHONY switch-export.opam $(atd_ml_files)
+
+clean-ml-of-atd: PHONY
+	find ./bin ./lib -type f -regex '^.*_[jt]\.mli?$$' -exec rm '{}' ';'
+
+
+ml_files = $(shell \
+	for file in $$(find . -type f \( -iname "?*.ml" -or -iname "?*.mli" \)); do \
+		echo "$$file"; \
+	done \
+	| paste -sd " " - \
+)
+
+dune_files = $(shell find . -type f -iname "dune" | paste -sd " " -)
+
+source_files = $(atd_ml_files) $(ml_files) $(dune_files)
+
+test: PHONY switch-export.opam $(source_files)
+	dune runtest
+
+
+_build/default/bin/main.exe: switch-export.opam $(source_files)
+	dune build bin/main.exe
+
+main.exe: PHONY _build/default/bin/main.exe
+
+rebuild: PHONY switch-export.opam
+	dune build bin/main.exe
+
+run: PHONY main.exe
+	_build/default/bin/main.exe ../_env/config.json
+
+# Build and run main.exe
+brun: PHONY rebuild run
