@@ -4,17 +4,16 @@ SHELL = /bin/bash
 .PHONY: PHONY
 PHONY:
 
-
-_ignore := $(shell eval $$(opam env))
+env = eval $$(opam env) &&
 
 
 _opam/.opam-switch/switch-config:
-	eval (opam env)
+	eval $$(opam env)
 	opam switch create . --empty
 	opam switch import switch-export.opam
 
 switch-export.opam: _opam/.opam-switch/switch-config
-	eval (opam env)
+	eval $$(opam env)
 	opam switch export switch-export.opam
 
 
@@ -28,7 +27,7 @@ atd_ml_files = $(shell \
 
 define atdgen
 	$(eval type := $(shell echo -n "$$(expr "$2" : '.*\_\([tj]\).ml')"))
-	atdgen -$(type) $1
+	$(env) atdgen -$(type) $1
 endef
 
 $(filter %_t.ml,$(atd_ml_files)): %_t.ml: %.atd switch-export.opam
@@ -56,16 +55,19 @@ dune_files = $(shell find . -type f -iname "dune" | paste -sd " " -)
 source_files = $(atd_ml_files) $(ml_files) $(dune_files)
 
 test: PHONY switch-export.opam $(source_files)
-	dune runtest
+	$(env) dune runtest
 
 
 _build/default/bin/main.exe: switch-export.opam $(source_files)
-	dune build bin/main.exe
+	$(env) dune build bin/main.exe
 
 main.exe: PHONY _build/default/bin/main.exe
 
+clean-build:
+	rm -rf _build
+
 rebuild: PHONY switch-export.opam
-	dune build bin/main.exe
+	$(env) dune build bin/main.exe
 
 run: PHONY main.exe
 	_build/default/bin/main.exe ../_env/config.json
