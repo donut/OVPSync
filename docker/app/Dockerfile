@@ -24,8 +24,12 @@ RUN apt-get update && apt-get install --assume-yes \
   # Clean up
   && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /app
-RUN chown -R opam:opam /app
+# Project directory
+# PROJECT_PREFIX can be used so that the path matches the path on the host
+# system. This can facilitate IDE plugins that rely on .merlin files.
+ARG PROJECT_PREFIX
+RUN mkdir -p ${PROJECT_PREFIX}
+RUN chown -R opam:opam ${PROJECT_PREFIX}
 
 USER opam
 

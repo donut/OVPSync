@@ -1,5 +1,8 @@
-SHELL = /bin/bash
+ifneq ($(wildcard .env),'')
+	include .env
+endif
 
+SHELL = /bin/bash
 
 .PHONY: PHONY
 PHONY:
@@ -88,7 +91,7 @@ shell: PHONY .env
 	
 
 
-app-make = $(dc) exec --user=opam --workdir=/app/src app make
+app-make = $(dc) exec --user=opam --workdir=$(APP_PREFIX_DIR)/src app make
 
 
 clean-build: PHONY .env

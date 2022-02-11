@@ -6,6 +6,7 @@ services:
       context: ./docker/app
       args:
         TZ: ${TZ:?TZ unset. Use `make .env`.}
+        PROJECT_PREFIX: ${APP_PREFIX_DIR:?APP_PREFIX_DIR unset. Use `make .env`.}
       # Use docker-compose.override.yml to target the `development` environment.
       target: production
     restart: unless-stopped
@@ -13,9 +14,9 @@ services:
     environment:
       - TERM=xterm-256color
     volumes:
-      - ./docker/app/entrypoint.sh:/app/entrypoint.sh
-      - ./_env/config.json:/app/_env/config.json:ro
-      - ./_data/app:/app/_data
+      - ./docker/app/entrypoint.sh:${APP_PREFIX_DIR}/entrypoint.sh
+      - ./_env/config.json:${APP_PREFIX_DIR}/_env/config.json:ro
+      - ./_data/app:${APP_PREFIX_DIR}/_data
     depends_on:
       - db
 
