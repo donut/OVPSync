@@ -16,6 +16,9 @@ switch-export.opam: _opam/.opam-switch/switch-config
 	eval $$(opam env)
 	opam switch export switch-export.opam
 
+clean-local-opam-switch: PHONY _opam
+	rm -rf _opam
+
 
 atd_ml_files = $(shell \
 	for file in $$(find ./bin ./lib -type f -iname "*.atd"); do \
