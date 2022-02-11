@@ -10,4 +10,4 @@ until $(nc -zv db 3306); do
 done
 
 echo "Looks like MariaDB is up. Starting app..."
-/app/bin/main.exe $@
+./bin/main.exe $@

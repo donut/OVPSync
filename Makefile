@@ -91,8 +91,10 @@ shell: PHONY .env
 	
 
 
-app-make = $(dc) exec --user=opam --workdir=$(APP_PREFIX_DIR)/src app make
+app-make = $(dc) exec --user=opam --workdir=$(APP_PREFIX_DIR)/app app make
 
+clean-local-opam-switch: PHONY .env
+	$(app-make) $@
 
 clean-build: PHONY .env
 	$(app-make) $@
@@ -119,7 +121,7 @@ run: PHONY .env
 	$(app-make) $@
 
 # Build and run main.exe
-brun: PHONY
+brun: PHONY .env
 	$(app-make) $@
 
 

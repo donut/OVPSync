@@ -3,7 +3,7 @@ version: '3.6'
 services:
   app:
     build: 
-      context: ./docker/app
+      context: ./app
       args:
         TZ: ${TZ:?TZ unset. Use `make .env`.}
         PROJECT_PREFIX: ${APP_PREFIX_DIR:?APP_PREFIX_DIR unset. Use `make .env`.}
@@ -14,7 +14,7 @@ services:
     environment:
       - TERM=xterm-256color
     volumes:
-      - ./docker/app/entrypoint.sh:${APP_PREFIX_DIR}/entrypoint.sh
+      - ./app/entrypoint.sh:${APP_PREFIX_DIR}/entrypoint.sh
       - ./_env/config.json:${APP_PREFIX_DIR}/_env/config.json:ro
       - ./_data/app:${APP_PREFIX_DIR}/_data
     depends_on:
@@ -22,7 +22,7 @@ services:
 
   db: 
     build:
-      context: ./docker/db
+      context: ./db
       args: [ TZ ]
     restart: unless-stopped
     ports: [ "3306" ]
@@ -35,5 +35,5 @@ services:
     tty: true
     volumes:
       - ./_data/db/data:/var/lib/mysql
-      - ./docker/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
       - ./_env/mysql-dump.sql:/docker-entrypoint-initdb.d/002-dump.sql:ro
