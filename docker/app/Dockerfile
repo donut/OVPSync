@@ -18,11 +18,9 @@ RUN apt-get update && apt-get install --assume-yes \
   # Niceties
   fish vim \
   # Needed for @opam/conf-gmp@opam:1
-#  libgmp-dev \
+  libgmp-dev \
   # Needed for @opam/caqti-driver-mariadb \
-  pkg-config  libmariadb-dev \
-  # Needed for @esy-ocaml/libffi@3.2.10
-#  texinfo \
+  pkg-config  libmariadb-dev libssl-dev \
   # Clean up
   && rm -rf /var/lib/apt/lists/*
 
@@ -30,10 +28,6 @@ RUN mkdir /app
 RUN chown -R opam:opam /app
 
 USER opam
-
-#RUN eval $(opam env)
-#RUN opam switch create /app ocaml-4.07
-#RUN opam install dune
 
 
 
