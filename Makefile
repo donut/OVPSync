@@ -79,7 +79,6 @@ clean-docker-containers: PHONY
 clean-docker-deeply: PHONY
 	$(dc) down --volumes --rmi all || exit 0
 	$(su-rm) -rf .docker 
-	rm -f esy
 	rm -f .env
 
 clean-data: PHONY

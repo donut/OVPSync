@@ -9,15 +9,10 @@ services:
       target: development
     volumes:
       # Required for building.
-      - ./src:${APP_PREFIX_DIR}/src
-#      - ./bin:/app/bin
-#      - ./lib:/app/lib
-#      - ./dune-project:/app/dune-project
-#      - ./esy.lock:/app/esy.lock
-#      - ./package.json:/app/package.json
+      - ./app:${APP_PREFIX_DIR}/app
 
       # Required for running app
-      - ./_env/config.json:${APP_PREFIX_DIR}/_env/config.json:ro
+      # - ./_env/config.json:${APP_PREFIX_DIR}/_env/config.json:ro
 
   db: 
     ports: [ "3306:3306" ]
