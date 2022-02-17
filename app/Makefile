@@ -1,14 +1,11 @@
 SHELL = /bin/bash
 
-
 .PHONY: PHONY
 PHONY:
 
+
 env = eval $$(opam env) &&
 
-
-opam.env: 
-	opam env > opam.env
 
 _opam/.opam-switch/switch-config:
 	$(env) opam switch create . --empty
