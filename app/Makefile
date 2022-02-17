@@ -69,7 +69,7 @@ _build/default/bin/main.exe: switch-export.opam $(source_files)
 
 main.exe: PHONY _build/default/bin/main.exe
 
-clean-build:
+clean-build: PHONY
 	rm -rf _build
 
 rebuild: PHONY switch-export.opam
