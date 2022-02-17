@@ -38,6 +38,7 @@ USER opam
 #### Build for production ###
 FROM development as app-build
 
+ARG PROJECT_PREFIX
 RUN mkdir -p ${PROJECT_PREFIX}/app
 WORKDIR ${PROJECT_PREFIX}/app
 
