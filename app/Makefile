@@ -7,19 +7,19 @@ PHONY:
 env = eval $$(opam env) &&
 
 
-_opam/.opam-switch/switch-config:
+_opam/.opam-switch/switch-state:
 	$(env) opam switch create . --empty
 	# The build process sometimes fails due to parallelism. This will repeat the
 	# build without parallelization if it fails the first time.
 	$(env) (opam switch import switch-export.opam \
 					|| opam switch import --jobs=1 switch-export.opam)
 
-dependencies: PHONY _opam/.opam-switch/switch-config
+dependencies: PHONY _opam/.opam-switch/switch-state
 
 clean-local-opam-switch: PHONY
 	rm -rf _opam
 
-switch-export.opam: _opam/.opam-switch/switch-config
+switch-export.opam: _opam/.opam-switch/switch-state
 	$(env) opam switch export switch-export.opam
 
 
