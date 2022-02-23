@@ -16,7 +16,11 @@ services:
     volumes:
       - ./app/entrypoint.sh:${APP_PREFIX_DIR}/entrypoint.sh
       - ./_env/config.json:${APP_PREFIX_DIR}/_env/config.json:ro
-      - ./_data/app:${APP_PREFIX_DIR}/_data
+      # File store volumes should be defined in docker-compose.override.yml.
+      # They need to match up with the [rdb_dest.file_store] parameter in
+      # _env/config.json. Below values are just examples.
+      # - ./_data/app:${APP_PREFIX_DIR}/_data/volume_a
+      # - /Volumes/OVPSync_extra:${APP_PREFIX_DIR}/_data/volume_b
     depends_on:
       - db
 

@@ -1,0 +1,9 @@
+
+
+type max_usage = string option wrap 
+  <ocaml module="Rdb_dest.File_store.Max_usage">
+
+type t =
+  { path : string
+  ; max_usage : max_usage
+    <ocaml valid="Rdb_dest.File_store.Max_usage.validate"> }
