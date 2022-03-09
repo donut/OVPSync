@@ -17,7 +17,7 @@ module Level = struct
     |   `Off -> ( 0,   "off", "🔳")
     | `Fatal -> (10, "fatal", "🛑")
     | `Error -> (20, "error", "❌")
-    |  `Warn -> (30,  "warn", "⚠️")
+    |  `Warn -> (30,  "warn", "☢️")
     |  `Info -> (40,  "info", "ℹ️")
     | `Debug -> (50, "debug", "♒️")
     | `Trace -> (60, "trace", "🔎")
@@ -45,8 +45,8 @@ end
 module type Sig = sig
   val level : Level.t
 
-  val log : Level.t -> string -> unit Lwt.t
-  val logf : Level.t -> ('a, unit, string, unit Lwt.t) format4 -> 'a
+  val log : Level.t -> ?exn:exn -> string -> unit Lwt.t
+  val logf : Level.t -> ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
   val fatal : ?exn:exn -> string -> unit Lwt.t
   val fatalf : ?exn:exn -> ('a, unit, string, unit Lwt.t) format4 -> 'a
   val error : ?exn:exn -> string -> unit Lwt.t
@@ -99,7 +99,7 @@ module Make (Conf : Config) : Sig = struct
       Lwt.return ()
 
 
-  let log (level : Level.t) message =
+  let log (level : Level.t) ?exn message =
     if Level.compare Conf.level level < 0 then Lwt.return ()
     else
     let now = Unix.time () in
@@ -110,29 +110,29 @@ module Make (Conf : Config) : Sig = struct
     let time = time_string_of_timestamp now in
     let lvl = Level.to_symbol level in
 
+    let message = 
+      match exn with
+      | None -> message
+      | Some e -> message ^ " Exception: " ^ (Printexc.to_string e)
+    in
+
     Lwt_io.printlf "%s %s %s  %s" time Conf.prefix lvl message
 
 
-  let logf (level : Level.t) fmt =
-    ksprintf (log level) fmt
-
-
-  let add_exn_to_message exn message =
-    message ^ match exn with
-    | None -> ""
-    | Some e -> " Exception: " ^ (Printexc.to_string e)
+  let logf (level : Level.t) ?exn fmt =
+    ksprintf (log level ?exn)  fmt
 
 
   let fatal ?exn message =
-    log `Fatal (add_exn_to_message exn message)
+    log `Fatal ?exn message
   let fatalf ?exn fmt =
     ksprintf (fatal ?exn) fmt
   let error ?exn message =
-    log `Error (add_exn_to_message exn message)
+    log `Error ?exn message
   let errorf ?exn fmt =
     ksprintf (error ?exn) fmt
   let warn ?exn message =
-    log `Warn (add_exn_to_message exn message)
+    log `Warn ?exn message
   let warnf ?exn fmt =
     ksprintf (warn ?exn) fmt
   let info message =
