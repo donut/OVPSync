@@ -13,6 +13,7 @@ type t = {
   file_uri : Uri.t option;
   filename : string;
   md5 : string option;
+  size : int option;
   width : int option;
   height : int option;
   duration : int option;

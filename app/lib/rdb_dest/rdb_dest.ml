@@ -9,26 +9,22 @@ module Bopt = BatOption
 open Lwt.Infix
 open Lib.Infix.Option
 
+
 let spf = Printf.sprintf
+let estimated_safe_max_image_size = 10 * 1024 * 1024
+(* A size in bytes that is realistically far outside the likely values for
+   images. This is used to estimate how much space we should expect an image
+   to use when selecting the file store to use. *)
+
+let is_local_uri = File_store.is_local_uri
+
 
 module type Config = sig
   val db_pool : (Caqti_lwt.connection, Caqti_error.t) Caqti_lwt.Pool.t
-  (* [files_path] Where to save video and thumbnail files to. *)
-  val files_path : string
+
+  val file_stores : string list
+  (* List of absolute path prefixes for possible locations to store files. *)
 end
-
-let local_scheme = "local"
-
-let make_local_uri rel_path filename =
-  let rel_path = 
-    rel_path |> File.trim_slashes |> String.split_on_char '/'
-    |> List.map Uri.pct_encode |> String.concat "/" in
-  let filename = Uri.pct_encode filename in
-  spf "%s:///%s/%s" local_scheme rel_path filename
-
-
-let is_local_uri uri =
-  Uri.scheme uri |> (=) (Some local_scheme)
 
 
 let video_ext t = 
@@ -82,71 +78,72 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
   let get_video_id_by_media_ids media_ids =
     Select.video_id_by_media_ids (`Pool Conf.db_pool) media_ids
 
-  let gen_file_paths t =
-    let canonical = Video.canonical t in
-    let rel = Source.added canonical |> File.dir_of_timestamp in
-    let abs = spf "%s/%s" Conf.files_path rel in
-    let basename = Video.filename t |> File.sanitize |> File.basename in
-    (abs, rel, basename)
-
-  let abs_path_of_uri uri =
-    let rel_path = 
-      Uri.path uri |> File.trim_slashes
-      |> String.split_on_char '/' |> List.map Uri.pct_decode
-      |> String.concat "/" in
-    spf "%s/%s" Conf.files_path rel_path
+let make_relative_path video =
+  let canonical = Video.canonical video in
+  let rel = Source.added canonical |> File.dir_of_timestamp in
+  let basename = Video.filename video |> File.sanitize |> File.basename in
+  (rel, basename)
 
 
-  let maybe_update_video_file_path dbc t new_t =
-    let (_, rel_path, basename) = gen_file_paths new_t in 
+  (** [maybe_update_video_file_path dbc store t new_t] renames/moves existing  
+      video file referenced by [t.file_uri] if changes in [new_t] warrant them. 
+      For example, slug or creation date changes. *)
+  let maybe_update_video_file_path dbc store t new_t =
+    let rel_path, basename = make_relative_path new_t in 
     let ext = video_ext new_t in
     let filename = File.restrict_name_length basename ext in
-    let new_uri = make_local_uri rel_path filename in
-    let old_uri = t |> Video.file_uri |> Bopt.get |> Uri.to_string in
+    let new_uri_string = File_store.make_local_uri rel_path filename in
+    let old_uri_string = t |> Video.file_uri |> Bopt.get |> Uri.to_string in
 
-    if new_uri = old_uri then Lwt.return t
+    if new_uri_string = old_uri_string 
+    then Lwt.return t
     else
 
     let media_id = media_id_of_video t in
     Log.debugf "[%s] Moving video file from [%s] to [%s]"
-      media_id old_uri new_uri >>= fun () ->
+      media_id old_uri_string new_uri_string >>= fun () ->
 
-    let new_abs_path = abs_path_of_uri (Uri.of_string new_uri) in
-    let old_abs_path
-      = abs_path_of_uri (t |> Video.file_uri |> Bopt.get) in
+    let old_uri = old_uri_string |> Uri.of_string in
+    let new_uri = new_uri_string |> Uri.of_string in
+
+    let old_abs_path = old_uri |> File_store.abs_path_of_local_uri store in
+    let new_abs_path = new_uri |> File_store.abs_path_of_local_uri store in
     Lwt_unix.rename old_abs_path new_abs_path >>= fun () ->
 
     let vid_id = Video.id t |> Bopt.get in
-    let%lwt () = Update.video_file_uri dbc vid_id (Some new_uri) in
-    Lwt.return { t with file_uri = Some (Uri.of_string new_uri) }
+    let%lwt () = Update.video_file_uri dbc vid_id (Some new_uri_string) in
+    Lwt.return { t with file_uri = Some new_uri }
 
 
   let save_thumb_file 
-    dbc ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
+    dbc ~store ~uri ~vid_id ~media_id ~rel_path ~basename ~ext
   =
     let filename = File.restrict_name_length basename ext in
+    let abs_path = spf "%s/%s" store rel_path in
     let file_path = spf "%s/%s" abs_path filename in
 
     match%lwt File.save uri ~to_:file_path with 
     | exception exn -> 
       begin match exn with
-      | File.File_error _ as exn -> raise exn
+      | File.File_error _ as exn -> 
+        raise exn
       | _ -> 
-        Log.warnf ~exn "[%s] Failed saving thumbnail [%s] to [%s]"
+        Log.warnf "[%s] Failed saving thumbnail [%s] to [%s]"
           media_id (uri |> Uri.to_string) file_path >>= fun () ->
         File.unlink_if_exists file_path >|= fun () ->
         Error exn
       end
     | _ ->
-      let local_path = make_local_uri rel_path filename in
+      let local_path = File_store.make_local_uri rel_path filename in
       let%lwt () = Update.video_thumbnail_uri dbc vid_id (Some local_path) in
       Lwt.return @@ Ok (Uri.of_string local_path)
 
 
   let save_video_file 
-    dbc ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
+    dbc ~store ~uri ~vid_id ~media_id ~rel_path ~basename ~ext
   =
     let filename = File.restrict_name_length basename ext in
+    let abs_path = spf "%s/%s" store rel_path in
     let file_path = spf "%s/%s" abs_path filename in
 
     match%lwt File.save uri ~to_:file_path >|= fun () -> Ok () with
@@ -161,7 +158,7 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
       end
 
     | _ ->
-      let local_path = make_local_uri rel_path filename in
+      let local_path = File_store.make_local_uri rel_path filename in
       Update.video_file_uri dbc vid_id (Some local_path) >>= fun () ->
       let md5 = File.md5 file_path in
       Update.video_md5 dbc vid_id md5 >|= fun () ->
@@ -169,57 +166,118 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
       Ok (file_uri, md5)
     
 
-  let move_temp_file temp_uri =
-    let temp_path = abs_path_of_uri temp_uri in
+  let make_temp_file_permanent ~store temp_uri =
     let suffix_ptrn = Re.Perl.compile_pat "\\.temp$" in
+
+    let temp_path = temp_uri |> File_store.abs_path_of_local_uri store in
     let final_uri = temp_uri
       |> Uri.to_string 
       |> Re.replace_string ~all:false suffix_ptrn ~by:"" 
       |> Uri.of_string in
-    let final_path = abs_path_of_uri final_uri in
+    let final_path = final_uri |> File_store.abs_path_of_local_uri store in
+
     Lwt_unix.rename temp_path final_path >|= fun () ->
     final_uri
+
+
+  (** [required_space_of_t t] makes an estimate of how much space will be
+      required to save its files (video and thumbnail). If the [t.size]
+      property is missing, returns {!None}. *)
+  let required_space_of_t t =
+    t |> Video.size >|? (+) estimated_safe_max_image_size
+
+
+  (** [unwrap_and_report_on_picked_store_exn media_id store_pick] returns the 
+      store path in [store_pick] if it's not {!None}. Otherwise, logs and 
+      raises on error or no store found with enough space. *)
+  let unwrap_and_report_on_picked_store_exn media_id store_pick =
+    match store_pick with
+    | Error (level, exn, msg) ->
+      let%lwt () = Log.logf level ?exn "[%s] %s" media_id msg in
+      begin match exn with
+      | None -> failwith msg
+      | Some exn -> raise exn
+      end
+
+    | Ok { File_store. path=None; required_space; checked; _  } ->
+      let checked = 
+        checked 
+        |> List.map (fun (store, space) -> spf "[%s: %i B]" store space)
+        |> String.concat " " in
+      let msg = spf 
+        "[%s] No file stores with required space: %i B. Checked stores: %s"
+        media_id required_space checked in
+      let%lwt () = Log.fatal msg in
+      failwith msg
+
+    | Ok { File_store. path=(Some path); available_space; required_space; _ } ->
+      let%lwt _ = Log.debugf 
+        "[%s] Picked file store [%s: %i B] with estimated usage of %i B"
+        media_id path available_space required_space in
+      Lwt.return path
+
 
   let save_new dbc t =
     let media_id = media_id_of_video t in
 
+    (* Save to DB. *)
     Log.debugf "[%s] Inserting into DB." media_id >>= fun () ->
     let%lwt t = Insert.video dbc t in
+
     let vid_id = Video.id t |> BatOption.get in
     Log.infof "[%s] Inserted as [%d]." media_id vid_id >>= fun () ->
 
+    (* Save files. *)
     match Video.(file_uri t, thumbnail_uri t) with
     | None, None -> 
       Log.debugf "[%s] No file or thumbnail URIs." media_id >>= fun () ->
       Lwt.return t
 
     | file_uri, thumb_uri ->
-      let abs_path, rel_path, basename = gen_file_paths t in
-      File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
+      let%lwt store = 
+        let required_space = required_space_of_t t in
 
-      let%lwt t = match thumb_uri with
-      | None -> Lwt.return t
-      | Some uri ->
-        begin
+        Conf.file_stores
+        |> File_store.pick ?required_space
+        |> unwrap_and_report_on_picked_store_exn media_id in
+
+      let rel_path, basename = make_relative_path t in
+      File.prepare_dir ~prefix:store rel_path >>= fun _ ->
+
+      let%lwt t = 
+        match thumb_uri with
+        | None -> 
+          Lwt.return t
+
+        | Some uri -> begin
           let ext = thumb_ext t in
+
           Log.infof "[%s] Downloading thumbnail to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
-          match%lwt save_thumb_file dbc ~vid_id ~media_id ~uri
-                                    ~abs_path ~rel_path ~basename ~ext with
+
+          match%lwt 
+            save_thumb_file 
+              dbc ~store ~uri ~vid_id ~media_id ~rel_path ~basename ~ext 
+          with
           | Error _ -> Lwt.return t
           | Ok uri -> Lwt.return { t with thumbnail_uri = Some uri }
         end
       in
 
-      let%lwt t = match file_uri with 
-      | None -> Lwt.return t
-      | Some uri ->
-        begin
+      let%lwt t = 
+        match file_uri with 
+        | None -> 
+            Lwt.return t
+
+        | Some uri -> begin
           let ext = video_ext t in
           Log.infof "[%s] Downloading video file to [%s/%s.%s]"
             media_id rel_path basename ext >>= fun () ->
-          match%lwt save_video_file dbc ~vid_id ~media_id ~uri
-                                    ~abs_path ~rel_path ~basename ~ext with
+
+          match%lwt 
+            save_video_file 
+              dbc ~store ~uri ~vid_id ~media_id ~rel_path ~basename ~ext 
+          with
           | Error _ -> Lwt.return t
           | Ok (local_uri, md5) ->
             Lwt.return { t with file_uri = Some local_uri; md5 = Some md5 }
@@ -228,108 +286,146 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
 
       Lwt.return t
 
-  let rm_old_file_if_renamed ~old ~new_ =
+
+  let unlink_old_file_if_renamed ~old ~new_ =
     match old with
-    | Some old when old <> new_ && is_local_uri old ->
-      Log.debugf "--> Removing old file at [%s]" (Uri.to_string old)
-        >>= fun () ->
-      File.unlink_if_exists @@ abs_path_of_uri old
-    | _ -> Lwt.return ()
+    | Some old when old |> File_store.is_local_uri ->
+      begin if old <> new_ then
+        let%lwt () = Log.debugf 
+          "--> Removing old file at [%s]" (Uri.to_string old) in
+        File_store.unlink_uri_if_found_on_stores Conf.file_stores old
+
+      else
+        let%lwt old_store = 
+          old |> File_store.store_of_local_uri Conf.file_stores in
+        let%lwt new_store = 
+          new_ |> File_store.store_of_local_uri Conf.file_stores in
+
+        match old_store, new_store with
+        | None, _ (* Nothing we have access to to delete. *)
+        |    _, None -> (* Renamed to nothing? *)
+          Lwt.return ()
+
+        | Some old_store, Some new_store when old_store = new_store ->
+          Lwt.return ()
+
+        | Some old_store, Some _ ->
+          old
+          |> File_store.abs_path_of_local_uri old_store
+          |> File.unlink_if_exists
+      end
+
+    | _ -> 
+      Lwt.return ()
 
   
-  let update_thumbnail dbc t ~old_t ~new_t =
+  let update_thumbnail dbc ~store ~old_t ~new_t t =
     let vid_id = Video.id t |> Bopt.get in
 
-    match Video.thumbnail_uri new_t with
+    match new_t |> Video.thumbnail_uri with
     | None ->
-      begin match Video.thumbnail_uri old_t with
-      | None -> Lwt.return t
-      | Some uri when is_local_uri uri -> Lwt.return t
-      | Some _ ->
+      (* Keep the old URI in place if the thumbnail image it links to was
+         already saved to the store. It could be that the thumbnail no longer
+         makes sense for this video, but we don't lose anything for keeping it.
+         *)
+      begin match old_t |> Video.thumbnail_uri with
+      | Some uri when not (File_store.is_local_uri uri) -> 
         let%lwt () = Update.video_thumbnail_uri dbc vid_id None in
         Lwt.return { t with thumbnail_uri = None }
+        
+      | _ -> 
+        Lwt.return t
       end
 
     | Some uri -> begin
       let media_id = media_id_of_video t in
-      let abs_path, rel_path, basename = gen_file_paths new_t in
-      let%lwt _ = File.prepare_dir ~prefix:Conf.files_path rel_path in
+      let rel_path, basename = new_t |> make_relative_path in
+      let%lwt _ = File.prepare_dir ~prefix:store rel_path in
 
       let ext = spf "%s.temp" (thumb_ext new_t) in
       let%lwt () = Log.infof
         "[%s] Downloading thumbnail to [%s/%s.%s]"
         media_id rel_path basename ext in
 
-      let%lwt result = save_thumb_file
-        dbc ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext 
-      in
-
-      match result with
-      | Error _ -> Lwt.return t
+      match%lwt
+        save_thumb_file
+          dbc ~store ~uri ~vid_id ~media_id ~rel_path ~basename ~ext
+      with
+      | Error _ -> 
+        Lwt.return t
 
       | Ok uri ->
         let%lwt () = Log.debugf
           "[%s] Moving thumbnail to permanent location." media_id in
-        let%lwt uri = move_temp_file uri in
+        let%lwt uri = make_temp_file_permanent ~store uri in
         
         let%lwt () =
           let str = Uri.to_string uri in
           Update.video_thumbnail_uri dbc vid_id (Some str)
         in
 
-        (* Delete old image if it was named differently, otherwise it
-           would have been replaced in the move .temp move. *)
-        let%lwt () = 
-          rm_old_file_if_renamed ~old:(Video.thumbnail_uri old_t) ~new_:uri
-        in
+        (* Delete old image if it was named differently or saved to a different 
+           store, otherwise it would have been replaced in the move .temp move. 
+           *)
+        unlink_old_file_if_renamed ~old:(Video.thumbnail_uri old_t) ~new_:uri 
+          >>= fun () ->
 
         Lwt.return { t with thumbnail_uri = Some uri }
     end
 
 
-  let update_video_file dbc t ~old_t ~new_t =
+  let update_video_file dbc ~store ~old_t ~new_t t =
     let vid_id = Video.id t |> Bopt.get in
 
     match Video.file_uri new_t with
     | None ->
+      (* Keep the old URI in place if the video it links to was already saved 
+         to the store. We lose nothing by keeping the old file around. *)
       begin match Video.file_uri old_t with
-      | None -> Lwt.return t
-      | Some uri when is_local_uri uri -> Lwt.return t
-      | Some _ ->
+      | Some uri when not (uri |> File_store.is_local_uri) -> 
         let%lwt () = Update.video_file_uri dbc vid_id None in
         Lwt.return { t with file_uri = None }
+      | _ -> 
+        Lwt.return t
       end
 
     | Some uri -> begin
       let media_id = media_id_of_video t in
-      let abs_path, rel_path, basename = gen_file_paths new_t in
-      File.prepare_dir ~prefix:Conf.files_path rel_path >>= fun _ ->
+      let rel_path, basename = make_relative_path new_t in
+      File.prepare_dir ~prefix:store rel_path >>= fun _ ->
 
-      if Video.md5 new_t = Video.md5 old_t
-        && Video.file_uri old_t >|? is_local_uri =?: false
-      then maybe_update_video_file_path dbc t new_t
+      let old_uri_is_local = 
+        old_t
+        |> Video.file_uri
+        >|? File_store.is_local_uri
+        =?: false in
+
+      if Video.md5 new_t = Video.md5 old_t && old_uri_is_local
+      then maybe_update_video_file_path dbc store t new_t
       else
 
       let ext = spf "%s.temp" (video_ext new_t) in
       Log.infof "[%s] Downloading video to [%s/%s.%s]"
         media_id rel_path basename ext >>= fun () ->
       
-      let%lwt result = save_video_file
-        dbc ~vid_id ~media_id ~uri ~abs_path ~rel_path ~basename ~ext
-      in
-      match result with 
-      | Error _ -> Lwt.return t
-      | Ok (temp_uri, md5) ->
-        Log.debugf "[%s] Moving video to permanent location." media_id
-          >>= fun () ->
+      match%lwt
+        save_video_file
+          dbc ~store ~uri ~vid_id ~media_id ~rel_path ~basename ~ext
+      with 
+      | Error _ -> 
+        Lwt.return t
 
-        let%lwt uri = move_temp_file temp_uri in
+      | Ok (temp_uri, md5) ->
+        let%lwt () = 
+          Log.debugf "[%s] Moving video to permanent location." media_id in
+        let%lwt uri = make_temp_file_permanent ~store temp_uri in
+
         let%lwt () =
-          let str = Uri.to_string uri in
+          let str = uri |> Uri.to_string in
           Update.video_file_uri dbc vid_id (Some str)
         in
 
-        rm_old_file_if_renamed ~old:(Video.file_uri old_t) ~new_:uri
+        unlink_old_file_if_renamed ~old:(Video.file_uri old_t) ~new_:uri
           >|= fun () ->
 
         { t with file_uri = Some uri; md5 = Some md5 }
@@ -338,24 +434,31 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
 
   let save_existing dbc t_id new_t =
     let new_t = Video.{ new_t with id = Some t_id } in
+
     let%lwt old_t = match%lwt Select.video dbc t_id with
       | None ->
         Log.errorf "[%s] Expected existing video with ID %d, but not found."
           (media_id_of_video new_t) t_id >>= fun () ->
         raise Not_found
-      | Some t -> Lwt.return t
+
+      | Some t -> 
+        Lwt.return t
     in
 
     let canonical', sources' = 
-      let old_srcs = Video.sources old_t
-        |> List.filter (fun os ->
-          Bopt.is_none @@
-            List.find_opt (Source.are_same os) (Video.sources new_t)) in
+      let old_srcs = 
+        Video.sources old_t
+        |> List.filter begin fun os ->
+          List.find_opt (Source.are_same os) (Video.sources new_t)
+          |> Bopt.is_none
+        end in
+
       let srcs = List.concat [old_srcs; Video.sources new_t] in
       let old_c, new_c = Video.(canonical old_t, canonical new_t) in
       let new_c = if Source.are_same old_c new_c
                   then { new_c with id = old_c.id }
                   else new_c in
+
       new_c, srcs
     in
     
@@ -370,9 +473,46 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
 
     let media_id = media_id_of_video t in
     Log.debugf "[%s] Updating fields in DB." media_id >>= fun () ->
-    t |>  Update.video dbc
-      >>= update_thumbnail dbc ~old_t ~new_t
-      >>= update_video_file dbc ~old_t ~new_t
+    
+    let%lwt t = t |> Update.video dbc in
+
+    (* If possible, we'd like to keep the files on the same store they're on
+       now. This helps prevent fragmentation (how many videos from around the 
+       same times are split between stores. *)
+    let%lwt store =
+      (* Figure out which store(s) the old files are currently on. *)
+      let%lwt old_video = 
+        match t |> Video.file_uri with
+        | None -> Lwt.return None
+        | Some uri -> uri |> File_store.File.of_local_uri Conf.file_stores in
+      let%lwt old_thumb =
+        match t |> Video.thumbnail_uri with
+        | None -> Lwt.return None
+        | Some uri -> uri |> File_store.File.of_local_uri Conf.file_stores in
+      
+      let old_store = 
+        let open File_store.File in
+        match old_video, old_thumb with
+        | None, None -> None
+        | None, Some { store; _ } -> Some store
+        | Some { store; _ }, _ -> Some store 
+      in
+      
+      let store_pick = 
+        let required_space = required_space_of_t new_t in
+        let stores =
+          match old_store with
+          | None -> Conf.file_stores
+          | Some old -> old :: Conf.file_stores in
+        stores |> File_store.pick ?required_space 
+      in
+
+      store_pick |> unwrap_and_report_on_picked_store_exn media_id
+    in
+   
+    t
+    |> update_thumbnail dbc ~store ~old_t ~new_t 
+    >>= update_video_file dbc ~store ~old_t ~new_t 
 
 
   let save' dbc t =
@@ -388,13 +528,13 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
     | None ->
       Log.debugf "[%s] Checking for existing video." media_id >>= fun () ->
       let%lwt existing = Select.source dbc
-        ~name:(Source.name canonical) ~media_id:(Source.media_id canonical)
-      in
+        ~name:(Source.name canonical) ~media_id:(Source.media_id canonical) in
 
       begin match existing with
       | None | Some { id = None; _ } ->
         Log.debugf "[%s] Saving as new video." media_id >>= fun () ->
         save_new dbc t
+
       | Some { id = Some src_id; video_id = None; _ } ->
         (* Looks like the process was stopped after the source was created, 
           but before the video's inserted ID was saved to the source. Better
@@ -402,11 +542,13 @@ module Make (Log : Logger.Sig) (Conf : Config) : Made = struct
           partial save edge cases. No files should have been saved, and the DB
           relations should be such that deleting the source will also delete all
           rows in other tables that reference it. *)
-        Log.debugf "[%s] Source already exists as [%d]. Deleting before saving as new video."
+        Log.debugf 
+          "[%s] Source already exists as [%d]. Deleting before saving as new video."
           media_id src_id >>= fun () ->
         Delete.source dbc src_id >>= fun () ->
         Lwt_unix.sleep 10. >>= fun () ->
         save_new dbc t
+
       | Some { video_id = Some vid_id; _ } ->
         Log.infof "[%s] Already exists as [%d]. Updating."
           media_id vid_id >>= fun () ->

@@ -180,7 +180,7 @@ let video dbc id =
     Some
       { Video. id = Some id; title; slug
       ; created; updated; publish; expires
-      ; file_uri; filename; md5; width; height; duration
+      ; file_uri; filename; md5; size = None; width; height; duration
       ; thumbnail_uri; description; tags; custom
       ; cms_id; link; canonical; sources }
     |> Lwt.return

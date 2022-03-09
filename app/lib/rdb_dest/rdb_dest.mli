@@ -8,8 +8,11 @@ val is_local_uri : Uri.t -> bool
 
 module type Config = sig
   val db_pool : (Caqti_lwt.connection, Caqti_error.t) Caqti_lwt.Pool.t
-  (* [files_path] Where to save video and thumbnail files to. *)
-  val files_path : string
+
+  (** List of absolute paths to locations on the file system to save files to.
+      Every time a file needs to save, they'll be checked for space in order
+      and the first one with free space will be chosen. *)
+  val file_stores : string list
 end
 
 module type Made = sig

@@ -5,14 +5,17 @@ module Clu = Cohttp_lwt_unix
 
 open Lwt.Infix
 
+
 let spf = Printf.sprintf
 let lplf fmt = Printf.ksprintf (Lwt_io.printl) fmt
 let plf fmt = Printf.ksprintf (print_endline) fmt
+
 
 exception File_error of string * string * string
 exception Request_failure of string * string * exn
 exception Timeout of string * string
 exception Unexpected_response_status of string * string * string
+
 
 let unexpected_response_status_exn
   ?(meth="GET") ?(params=[]) ~path ~resp ~body ()
@@ -103,77 +106,78 @@ let ext filename =
     | _ ->
       None
 
-  let basename filename = 
-    let b = filename |> String.split_on_char '/' |> BatList.last in
-    match ext b with
-    | None -> b
-    | Some e ->
-      let ptrn = Re.Perl.compile_pat @@ spf "\\.%s$" e in
-      Re.replace_string ~all:false ptrn ~by:"" b
+let basename filename = 
+  let b = filename |> String.split_on_char '/' |> BatList.last in
+  match ext b with
+  | None -> b
+  | Some e ->
+    let ptrn = Re.Perl.compile_pat @@ spf "\\.%s$" e in
+    Re.replace_string ~all:false ptrn ~by:"" b
 
-  let restrict_name_length base ext =
-    let name = spf "%s.%s" base ext in
-    let length = String.length name in
+let restrict_name_length base ext =
+  let name = spf "%s.%s" base ext in
+  let length = String.length name in
 
-    if length <= max_name_length then name
-    else
+  if length <= max_name_length then name
+  else
 
-    let new_length = 
-      max_name_length
-      - 3 (* for the --- to show that it was shortened *)
-      - 1 (* for the . separating the basename and extension *)
-      - String.length ext
-    in
-    let sub = String.sub base 0 new_length in
-    spf "%s---.%s" sub ext
+  let new_length = 
+    max_name_length
+    - 3 (* for the --- to show that it was shortened *)
+    - 1 (* for the . separating the basename and extension *)
+    - String.length ext
+  in
+  let sub = String.sub base 0 new_length in
+  spf "%s---.%s" sub ext
 
-  (** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
-      redirects. *)
-  let rec get_uri ?(redirects=30) uri =
-    let%lwt (resp, body) = try%lwt Clu.Client.get uri with
-      | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
-        raise @@ Timeout ("GET", (Uri.to_string uri))
-      | exn ->
-        raise @@ Request_failure ("GET", (Uri.to_string uri), exn)
-    in
-
-    (* Cut off redirect loop. *)
-    if redirects = 0
-    then Lwt.return (resp, body)
-    else
-
-    match C.Response.status resp with
-    | `Found | `Moved_permanently | `See_other | `Temporary_redirect ->
-      begin match C.Header.get (C.Response.headers resp) "location" with
-      | None -> Lwt.return (resp, body)
-      | Some l -> get_uri ~redirects:(redirects - 1) (Uri.of_string l)
-      end
-    | _ -> Lwt.return (resp, body)
-
-  let save src ~to_ =
-    let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_TRUNC ]) in
-    let%lwt file = try%lwt Lwt_unix.openfile to_ perms 0o664 with
+(** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
+    redirects. *)
+let rec get_uri ?(redirects=30) uri =
+  let%lwt (resp, body) = try%lwt Clu.Client.get uri with
+    | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
+      raise @@ Timeout ("GET", (Uri.to_string uri))
     | exn ->
-      let exn = Printexc.to_string exn in
-      raise @@ File_error (to_, "Failed opening/creating file", exn)
-    in
-    let fch = Lwt_io.of_fd ~mode:Output file in
-    
-    let%lwt (resp, body) = get_uri src in
+      raise @@ Request_failure ("GET", (Uri.to_string uri), exn)
+  in
 
-    if C.Response.status resp <> `OK then
-      Lwt_io.close fch >>= fun () ->
-      Lwt_unix.unlink to_ >>= fun () ->
-      unexpected_response_status_exn ~path:(Uri.to_string src) ~resp ~body ()
-      >>= raise
-    else
+  (* Cut off redirect loop. *)
+  if redirects = 0
+  then Lwt.return (resp, body)
+  else
 
-    Clwt.Body.to_stream body |> Lwt_stream.iter_s (Lwt_io.write fch)
-      >>= fun () ->
+  match C.Response.status resp with
+  | `Found | `Moved_permanently | `See_other | `Temporary_redirect ->
+    begin match C.Header.get (C.Response.headers resp) "location" with
+    | None -> Lwt.return (resp, body)
+    | Some l -> get_uri ~redirects:(redirects - 1) (Uri.of_string l)
+    end
+  | _ -> Lwt.return (resp, body)
 
-    Lwt_io.close fch
 
-  let unlink_if_exists path =
-    if%lwt Lwt_unix.file_exists path
-    then Lwt_unix.unlink path
-    else Lwt.return ()
+let save src ~to_ =
+  let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_TRUNC ]) in
+  let%lwt file = try%lwt Lwt_unix.openfile to_ perms 0o664 with
+  | exn ->
+    let exn = Printexc.to_string exn in
+    raise @@ File_error (to_, "Failed opening/creating file", exn)
+  in
+  let fch = Lwt_io.of_fd ~mode:Output file in
+  
+  let%lwt (resp, body) = get_uri src in
+
+  if C.Response.status resp <> `OK then
+    Lwt_io.close fch >>= fun () ->
+    Lwt_unix.unlink to_ >>= fun () ->
+    unexpected_response_status_exn ~path:(Uri.to_string src) ~resp ~body ()
+    >>= raise
+  else
+
+  Clwt.Body.to_stream body |> Lwt_stream.iter_s (Lwt_io.write fch)
+    >>= fun () ->
+
+  Lwt_io.close fch
+
+let unlink_if_exists path =
+  if%lwt Lwt_unix.file_exists path
+  then Lwt_unix.unlink path
+  else Lwt.return ()
