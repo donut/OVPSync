@@ -1,8 +1,7 @@
 
 type log_level <ocaml from="Log_level" t="t"> = abstract
-type file_store <ocaml from="File_store" t="t"> = abstract
 
 type t =
-  { file_stores : file_store list
+  { file_stores : string list
   ; log_level : log_level
   ; log_namespace : string }
