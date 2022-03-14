@@ -9,8 +9,7 @@
     failure up into the {!type:result}. This way, to the extent this monad is
     used, all exceptions should be caught and rolled into the {!type:result}. 
 
-    Opening {!Just_let_syntax} to use with [ppx_let].
-    *)
+    Open {!Just_let_syntax} to use with [ppx_let]. *)
 
 
 type 'a t = ('a, exn) Base.Result.t Lwt.t
