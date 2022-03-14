@@ -1,9 +1,12 @@
 
 open Lwt.Infix
+open Lib.Infix.Option
 
 
-let minimum_required_space = 5 * 1024 * 1024 * 1024
-(** Minimum space that should be avialable when choosing a location. *)
+let minimum_required_space = 5_368_709_120
+(** Minimum space that should be avialable when choosing a location. This is
+    used as a backup in case the true value couldn't be calculated. With that
+   in mind, it's much larger than we expect any file to be. *)
 
 
 let spf = Printf.sprintf
@@ -48,13 +51,12 @@ let check_free_space path =
 type pick = 
   { path : string option
   ; available_space : int
-  ; required_space : int 
+  ; required_space : int
   ; checked : (string * int) list }
 
 
 let pick ?required_space stores =
-  let required_space = 
-    required_space |> BatOption.default minimum_required_space in
+  let required_space = required_space =?: minimum_required_space in
 
   let rec check ?(checked=[]) ~required_space stores =
     match stores with

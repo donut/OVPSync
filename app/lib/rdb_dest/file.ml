@@ -41,20 +41,25 @@ let max_name_length = 255
 (* A safe value for most operating systems.
    @see https://serverfault.com/a/9548/54523 *)
 
+
 let md5 path = Digest.file path |> Digest.to_hex
+
 
 let sanitize name =
   let ptrn = Re.Perl.compile_pat "[\\/:]" in
   Re.replace_string ~all:true ptrn ~by:"-" name
+
 
 let dir_of_timestamp ts =
   let tm = Unix.gmtime (ts |> float_of_int) in
   let { tm_year; tm_mon; tm_mday; _ } : Unix.tm = tm in
   spf "%04d/%02d/%02d" (tm_year + 1900) (tm_mon + 1) tm_mday
 
+
 let trim_slashes p =
   let ptrn = Re.Perl.compile_pat "^/+|/+$" in
   Re.replace_string ~all:true ptrn ~by:"" p
+
 
 let check_dir path =
   let%lwt { st_kind; st_perm; _ } = Lwt_unix.stat path in
@@ -91,6 +96,7 @@ let rec prepare_dir ~prefix path =
     let prefix = spf "%s/%s" prefix hd in
     prepare_dir ~prefix (tl |> String.concat "/")
 
+
 let ext filename =
   let pattern = Re.Perl.compile_pat "\\.([\\w\\d]+)$" in
   match Re.exec_opt pattern filename with 
@@ -106,6 +112,7 @@ let ext filename =
     | _ ->
       None
 
+      
 let basename filename = 
   let b = filename |> String.split_on_char '/' |> BatList.last in
   match ext b with
@@ -113,6 +120,7 @@ let basename filename =
   | Some e ->
     let ptrn = Re.Perl.compile_pat @@ spf "\\.%s$" e in
     Re.replace_string ~all:false ptrn ~by:"" b
+
 
 let restrict_name_length base ext =
   let name = spf "%s.%s" base ext in
@@ -130,7 +138,8 @@ let restrict_name_length base ext =
   let sub = String.sub base 0 new_length in
   spf "%s---.%s" sub ext
 
-(** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
+
+(** [get_uri uri] is the same as [Cohttp_lwt_unix.Client.get] but follows
     redirects. *)
 let rec get_uri ?(redirects=30) uri =
   let%lwt (resp, body) = try%lwt Clu.Client.get uri with
@@ -152,6 +161,26 @@ let rec get_uri ?(redirects=30) uri =
     | Some l -> get_uri ~redirects:(redirects - 1) (Uri.of_string l)
     end
   | _ -> Lwt.return (resp, body)
+
+
+let content_length_of_uri uri = 
+  let result = get_uri uri in
+  let%lwt resp, body = result in
+
+  if (C.Response.status resp) = `OK then
+    (* Hacky way to close the connection without dowloading the response body.
+       Was not able to find any better solutions. Opened a
+       {{: https://github.com/mirage/ocaml-cohttp/issues/674} case with {!module:Cohttp}}.  *)
+    let () = Lwt.cancel result in
+
+    resp
+    |> C.Response.headers
+    |> C.Header.get_content_range
+    |> Lwt.return 
+
+  else
+    unexpected_response_status_exn ~path:(Uri.to_string uri) ~resp ~body ()
+    >>= raise
 
 
 let save src ~to_ =
@@ -176,6 +205,7 @@ let save src ~to_ =
     >>= fun () ->
 
   Lwt_io.close fch
+
 
 let unlink_if_exists path =
   if%lwt Lwt_unix.file_exists path

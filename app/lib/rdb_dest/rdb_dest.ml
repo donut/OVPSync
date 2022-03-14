@@ -11,7 +11,7 @@ open Lib.Infix.Option
 
 
 let spf = Printf.sprintf
-let estimated_safe_max_image_size = 10 * 1024 * 1024
+let estimated_safe_max_image_size = 10_485_760
 (* A size in bytes that is realistically far outside the likely values for
    images. This is used to estimate how much space we should expect an image
    to use when selecting the file store to use. *)
@@ -181,10 +181,33 @@ let make_relative_path video =
 
 
   (** [required_space_of_t t] makes an estimate of how much space will be
-      required to save its files (video and thumbnail). If the [t.size]
-      property is missing, returns {!None}. *)
+      required to save its files (video and thumbnail). *)
   let required_space_of_t t =
-    t |> Video.size >|? (+) estimated_safe_max_image_size
+    let fallback thumb_size t = t |> Video.size >|? (+) thumb_size in
+
+    let%lwt thumb_size = 
+      begin match t |> Video.thumbnail_uri with
+      | None -> 
+        Lwt.return None
+      | Some uri -> 
+        let%lwt size = uri |> File.content_length_of_uri in
+        Lwt.return (size >|? Int64.to_int)
+      end
+      >|= Bopt.default estimated_safe_max_image_size
+    in
+
+    match t |> Video.file_uri with
+    | None -> 
+      fallback thumb_size t |> Lwt.return
+    
+    | Some vid_uri ->
+      begin match%lwt vid_uri |> File.content_length_of_uri with
+      | None -> 
+        fallback thumb_size t |> Lwt.return
+      | Some vid_size -> 
+        let vid_size = vid_size |> Int64.to_int in
+        Some (vid_size + thumb_size) |> Lwt.return
+      end
 
 
   (** [unwrap_and_report_on_picked_store_exn media_id store_pick] returns the 
@@ -235,7 +258,7 @@ let make_relative_path video =
 
     | file_uri, thumb_uri ->
       let%lwt store = 
-        let required_space = required_space_of_t t in
+        let%lwt required_space = required_space_of_t t in
 
         Conf.file_stores
         |> File_store.pick ?required_space
@@ -498,13 +521,13 @@ let make_relative_path video =
         | Some { store; _ }, _ -> Some store 
       in
       
-      let store_pick = 
-        let required_space = required_space_of_t new_t in
+      let%lwt store_pick = 
+        let%lwt required_space = required_space_of_t new_t in
         let stores =
           match old_store with
           | None -> Conf.file_stores
           | Some old -> old :: Conf.file_stores in
-        stores |> File_store.pick ?required_space 
+        stores |> File_store.pick ?required_space |> Lwt.return
       in
 
       store_pick |> unwrap_and_report_on_picked_store_exn media_id

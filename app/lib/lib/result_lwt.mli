@@ -34,7 +34,7 @@ module Let_syntax : sig
 
   val both : 'a t -> 'b t -> ('a * 'b) t
   (** [both a b] combines the unwrapped values of [a] and [b] into the tuple 
-      [(a, b)] and returns it wrapped up in {!type:t} unless [a] or [b] are 
+      [(a, b)] and returns it wrapped up in {!type:t} unless [a] or [b] 
       evaluate to an error, in which case the wrapped error of [a] (first) or
       [b] (second) is returned. *)
 
