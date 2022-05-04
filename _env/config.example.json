@@ -32,9 +32,22 @@
   , "log_namespace" : "Source" }
 
 , "rdb_dest" : 
-  { // Absolute path to where the video and thumbnail files should be
-    // downloaded to within the Docker container. 
-    "files_path" : "/data/files"
+  { // Where to store files. Multiple locations can be specified to accomodate 
+    // spanning multiple volumes. The system distributes files based on order
+    // of location definition (first to last), available space, and max allowed
+    // usage. 
+    //
+    // Each location is defined by a "path" and "max_usage". Path should be
+    // absolute. Max usage follows the PHP-style suffixes of K, M, G, and T 
+    // (kilo-, mega-, giga-, and terabytes respectively). Case-insensitive. If
+    // no suffix is given, then the number will be taken as bytes. Setting 
+    // "max_usage" to `null` means use as much storage as is available.
+    // 
+    // See https://www.php.net/manual/en/faq.using.php#faq.using.shorthandbytes
+    "file_stores" : 
+    [ {"path": "/data/files/volume_a", "max_usage": "3G"}
+    , {"path": "/data/files/volume_b", "max_usage": "4G"}
+    , {"path": "/data/files/volume_c", "max_usage": null} ]
   , "log_level" : "info"
   , "log_namespace" : "Dest" }
 

@@ -179,6 +179,7 @@ let make
       ; file_uri
       ; filename = get_filename vid ~fallback:slug
       ; md5 = vid.md5
+      ; size = Some vid.size
       ; width
       ; height
       ; duration = parse_duration vid.duration

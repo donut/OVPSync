@@ -5,14 +5,19 @@ module Clu = Cohttp_lwt_unix
 
 open Lwt.Infix
 
+
 let spf = Printf.sprintf
-let lplf fmt = Printf.ksprintf (Lwt_io.printl) fmt
-let plf fmt = Printf.ksprintf (print_endline) fmt
+
 
 exception File_error of string * string * string
 exception Request_failure of string * string * exn
 exception Timeout of string * string
 exception Unexpected_response_status of string * string * string
+
+
+let min_dir_perms = 0o700
+let target_dir_perms = 0o755
+
 
 let unexpected_response_status_exn
   ?(meth="GET") ?(params=[]) ~path ~resp ~body ()
@@ -21,6 +26,7 @@ let unexpected_response_status_exn
     let query = Uri.encoded_of_query params in
     [ path; "?"; query; ] |> String.concat ""
   in
+
   let%lwt resp_str = 
     let status = Cohttp.Response.status resp |> Cohttp.Code.string_of_status in
     let headers = Cohttp.Response.headers resp |> Cohttp.Header.to_string in
@@ -32,67 +38,89 @@ let unexpected_response_status_exn
       status headers body 
     |> Lwt.return
   in
+
   Lwt.return @@ Unexpected_response_status (meth, request, resp_str)
 
 let max_name_length = 255
-(* A safe value for most operating systems.
-   @see https://serverfault.com/a/9548/54523 *)
+(** A safe value for most operating systems.
+    @see https://serverfault.com/a/9548/54523 *)
+
 
 let md5 path = Digest.file path |> Digest.to_hex
 
+
 let sanitize name =
+  (* Basically, only path characters are excluded. Dunno about other OSes, but
+     in some scenarios macOS uses colons. *)
   let ptrn = Re.Perl.compile_pat "[\\/:]" in
   Re.replace_string ~all:true ptrn ~by:"-" name
+
 
 let dir_of_timestamp ts =
   let tm = Unix.gmtime (ts |> float_of_int) in
   let { tm_year; tm_mon; tm_mday; _ } : Unix.tm = tm in
   spf "%04d/%02d/%02d" (tm_year + 1900) (tm_mon + 1) tm_mday
 
+
 let trim_slashes p =
   let ptrn = Re.Perl.compile_pat "^/+|/+$" in
   Re.replace_string ~all:true ptrn ~by:"" p
 
+
 let check_dir path =
   let%lwt { st_kind; st_perm; _ } = Lwt_unix.stat path in
-  if not (st_kind = Unix.S_DIR) then
-    (* @todo test with symbolic link to directory. Will [st_kind] be S_LNK
-              or still S_DIR. *)
+
+  if st_kind <> Unix.S_DIR then
+    (** @todo test with symbolic link to directory. Will [st_kind] be S_LNK
+              or still S_DIR. There is also {!Lwt_unix.lstat} which is 
+              specific to symlinks. *)
     raise @@ File_error (path, "is not a directory", "");
-  if st_perm < 0o700 then 
+
+  if st_perm < min_dir_perms then 
     raise @@ File_error (path, "permissions less than 0700", "");
+
   Lwt.return () 
 
 
-(** [prepare_dir ~prefix path] Creates all intermediate directories from
-    [prefix] to [path], including [prefix]. *)
 let rec prepare_dir ~prefix path =
   let path = trim_slashes path in
+
   begin match%lwt Lwt_unix.file_exists prefix with 
+  | true -> 
+    check_dir prefix
+
   | false ->
-    begin try%lwt Lwt_unix.mkdir prefix 0o775 with
+    begin try%lwt Lwt_unix.mkdir prefix target_dir_perms with
     | Unix.Unix_error(Unix.EEXIST, "mkdir", _) ->
       (* Because several saves can be run in parallel, between checking if the
          the dir exists and trying to create it, another LWT could have created
          it. *)
       check_dir prefix
+
     | exn ->
       let exn = Printexc.to_string exn in
       raise @@ File_error (prefix, "failed creating dir", exn)
     end
-  | true -> check_dir prefix
   end >>= fun () ->
+
   match String.split_on_char '/' path with
-  | [] | [""] -> Lwt.return prefix
+  | [] | [""] -> 
+    Lwt.return prefix
+
   | hd :: tl ->
     let prefix = spf "%s/%s" prefix hd in
     prepare_dir ~prefix (tl |> String.concat "/")
 
+
 let ext filename =
   let pattern = Re.Perl.compile_pat "\\.([\\w\\d]+)$" in
+
   match Re.exec_opt pattern filename with 
-  | None -> None
-  | Some g -> match Re.Group.all g with
+  | None -> 
+    None
+
+  | Some g -> 
+    match Re.Group.all g with
     | [| _; e |] ->
       let nums = Re.Perl.compile_pat "^\\d+$" in
       begin match Re.exec_opt nums e with
@@ -100,80 +128,111 @@ let ext filename =
       | Some _ -> None
       | None -> Some e
       end
+
     | _ ->
       None
 
-  let basename filename = 
-    let b = filename |> String.split_on_char '/' |> BatList.last in
-    match ext b with
-    | None -> b
-    | Some e ->
-      let ptrn = Re.Perl.compile_pat @@ spf "\\.%s$" e in
-      Re.replace_string ~all:false ptrn ~by:"" b
+      
+let basename filename = 
+  let b = filename |> String.split_on_char '/' |> BatList.last in
 
-  let restrict_name_length base ext =
-    let name = spf "%s.%s" base ext in
-    let length = String.length name in
+  match ext b with
+  | None -> 
+    b
 
-    if length <= max_name_length then name
-    else
+  | Some e ->
+    let ptrn = Re.Perl.compile_pat @@ spf "\\.%s$" e in
+    Re.replace_string ~all:false ptrn ~by:"" b
 
-    let new_length = 
-      max_name_length
-      - 3 (* for the --- to show that it was shortened *)
-      - 1 (* for the . separating the basename and extension *)
-      - String.length ext
-    in
-    let sub = String.sub base 0 new_length in
-    spf "%s---.%s" sub ext
 
-  (** [get_uri uri] The same as [Cohttp_lwt_unix.Client.get] but follows
-      redirects. *)
-  let rec get_uri ?(redirects=30) uri =
-    let%lwt (resp, body) = try%lwt Clu.Client.get uri with
-      | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
-        raise @@ Timeout ("GET", (Uri.to_string uri))
-      | exn ->
-        raise @@ Request_failure ("GET", (Uri.to_string uri), exn)
-    in
+let restrict_name_length base ext =
+  let name = spf "%s.%s" base ext in
+  let length = String.length name in
 
-    (* Cut off redirect loop. *)
-    if redirects = 0
-    then Lwt.return (resp, body)
-    else
+  if length <= max_name_length then name
+  else
 
-    match C.Response.status resp with
-    | `Found | `Moved_permanently | `See_other | `Temporary_redirect ->
-      begin match C.Header.get (C.Response.headers resp) "location" with
-      | None -> Lwt.return (resp, body)
-      | Some l -> get_uri ~redirects:(redirects - 1) (Uri.of_string l)
-      end
-    | _ -> Lwt.return (resp, body)
+  let new_length = 
+    max_name_length
+    - 3 (* for the --- to show that it was shortened *)
+    - 1 (* for the . separating the basename and extension *)
+    - String.length ext in
 
-  let save src ~to_ =
-    let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_TRUNC ]) in
-    let%lwt file = try%lwt Lwt_unix.openfile to_ perms 0o664 with
+  let sub = String.sub base 0 new_length in
+  spf "%s---.%s" sub ext
+
+
+(** [get_uri uri] is the same as [Cohttp_lwt_unix.Client.get] but follows
+    redirects. *)
+let rec get_uri ?(redirects=30) uri =
+  let%lwt (resp, body) = try%lwt Clu.Client.get uri with
+    | Unix.Unix_error(Unix.ETIMEDOUT, _, _) ->
+      raise @@ Timeout ("GET", (Uri.to_string uri))
     | exn ->
-      let exn = Printexc.to_string exn in
-      raise @@ File_error (to_, "Failed opening/creating file", exn)
-    in
-    let fch = Lwt_io.of_fd ~mode:Output file in
-    
-    let%lwt (resp, body) = get_uri src in
+      raise @@ Request_failure ("GET", (Uri.to_string uri), exn)
+  in
 
-    if C.Response.status resp <> `OK then
-      Lwt_io.close fch >>= fun () ->
-      Lwt_unix.unlink to_ >>= fun () ->
-      unexpected_response_status_exn ~path:(Uri.to_string src) ~resp ~body ()
-      >>= raise
-    else
+  (* Cut off redirect loop. *)
+  if redirects = 0
+  then Lwt.return (resp, body)
+  else
 
-    Clwt.Body.to_stream body |> Lwt_stream.iter_s (Lwt_io.write fch)
-      >>= fun () ->
+  match C.Response.status resp with
+  | `Found | `Moved_permanently | `See_other | `Temporary_redirect ->
+    begin match C.Header.get (C.Response.headers resp) "location" with
+    | None -> Lwt.return (resp, body)
+    | Some l -> get_uri ~redirects:(redirects - 1) (Uri.of_string l)
+    end
 
-    Lwt_io.close fch
+  | _ -> 
+    Lwt.return (resp, body)
 
-  let unlink_if_exists path =
-    if%lwt Lwt_unix.file_exists path
-    then Lwt_unix.unlink path
-    else Lwt.return ()
+
+let content_length_of_uri uri = 
+  let result = get_uri uri in
+  let%lwt resp, body = result in
+
+  if (C.Response.status resp) = `OK then
+    (* Hacky way to close the connection without dowloading the response body.
+       Was not able to find any better solutions. Opened a
+       {{: https://github.com/mirage/ocaml-cohttp/issues/674} case with {!module:Cohttp}}.  *)
+    let () = Lwt.cancel result in
+
+    resp
+    |> C.Response.headers
+    |> C.Header.get_content_range
+    |> Lwt.return 
+
+  else
+    unexpected_response_status_exn ~path:(Uri.to_string uri) ~resp ~body ()
+    >>= raise
+
+
+let download src ~to_ =
+  let perms = Lwt_unix.([ O_WRONLY; O_CREAT; O_TRUNC ]) in
+  let%lwt file = try%lwt Lwt_unix.openfile to_ perms 0o664 with
+  | exn ->
+    let exn = Printexc.to_string exn in
+    raise @@ File_error (to_, "Failed opening/creating file", exn)
+  in
+  let fch = Lwt_io.of_fd ~mode:Output file in
+  
+  let%lwt (resp, body) = get_uri src in
+
+  if C.Response.status resp <> `OK then
+    Lwt_io.close fch >>= fun () ->
+    Lwt_unix.unlink to_ >>= fun () ->
+    unexpected_response_status_exn ~path:(Uri.to_string src) ~resp ~body ()
+    >>= raise
+  else
+
+  Clwt.Body.to_stream body |> Lwt_stream.iter_s (Lwt_io.write fch)
+    >>= fun () ->
+
+  Lwt_io.close fch
+
+
+let unlink_if_exists path =
+  if%lwt Lwt_unix.file_exists path
+  then Lwt_unix.unlink path
+  else Lwt.return ()

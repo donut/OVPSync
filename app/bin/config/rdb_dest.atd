@@ -2,6 +2,6 @@
 type log_level <ocaml from="Log_level" t="t"> = abstract
 
 type t =
-  { files_path : string
+  { file_stores : string list
   ; log_level : log_level
   ; log_namespace : string }

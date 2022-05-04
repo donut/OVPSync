@@ -9,8 +9,7 @@
     failure up into the {!type:result}. This way, to the extent this monad is
     used, all exceptions should be caught and rolled into the {!type:result}. 
 
-    Opening {!Just_let_syntax} to use with [ppx_let].
-    *)
+    Open {!Just_let_syntax} to use with [ppx_let]. *)
 
 
 type 'a t = ('a, exn) Base.Result.t Lwt.t
@@ -34,7 +33,7 @@ module Let_syntax : sig
 
   val both : 'a t -> 'b t -> ('a * 'b) t
   (** [both a b] combines the unwrapped values of [a] and [b] into the tuple 
-      [(a, b)] and returns it wrapped up in {!type:t} unless [a] or [b] are 
+      [(a, b)] and returns it wrapped up in {!type:t} unless [a] or [b] 
       evaluate to an error, in which case the wrapped error of [a] (first) or
       [b] (second) is returned. *)
 

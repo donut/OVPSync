@@ -11,8 +11,10 @@ services:
       # Required for building.
       - ./app:${APP_PREFIX_DIR}/app
 
-      # Required for running app
-      # - ./_env/config.json:${APP_PREFIX_DIR}/_env/config.json:ro
+      # File stores
+      - ./_data/app/store_a:${APP_PREFIX_DIR}/_data/store_a
+      - ./_data/app/store_b:${APP_PREFIX_DIR}/_data/store_b
+      - /Volumes/WILLY/OVPSync:${APP_PREFIX_DIR}/_data/store_c
 
   db: 
     ports: [ "3306:3306" ]

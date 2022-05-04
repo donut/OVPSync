@@ -43,7 +43,7 @@ let make_rdb_dest db_pool log_level (conf : Config.Rdb_dest.t) =
 
   let module Dest = Rdb_dest.Make(Log)(struct
     let db_pool = db_pool
-    let files_path = conf.files_path
+    let file_stores = conf.file_stores
   end) in
 
   (module Dest : Rdb_dest.Made)

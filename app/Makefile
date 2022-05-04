@@ -36,6 +36,8 @@ define atdgen
 	$(env) atdgen -$(type) $1
 endef
 
+# These rules make use of "static patterns".
+# See http://www.gnu.org/software/make/manual/html_node/Static-Usage.html
 $(filter %_t.ml,$(atd_ml_files)): %_t.ml: %.atd switch-export.opam
 	$(call atdgen,$<,$@)
 

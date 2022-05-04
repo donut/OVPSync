@@ -13,6 +13,8 @@ type t = {
   file_uri : Uri.t option;
   filename : string;
   md5 : string option;
+  size : int option; 
+  (** The size of all transcodes as passed in from source. Not stored in DB. *)
   width : int option;
   height : int option;
   duration : int option;
